@@ -61,6 +61,7 @@ h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transfor
 }
 .tab.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .tab:disabled { opacity: .4; cursor: not-allowed; }
+.gear { border-radius: 6px; padding: .35rem .7rem; }
 
 /* forms */
 button {

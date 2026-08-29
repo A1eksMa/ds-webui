@@ -311,6 +311,9 @@
       case 'preset/set':
         return Object.assign({}, state, { preset: normalizePreset(a.preset), buildError: null });
 
+      case 'preset/setName':
+        return setIn(state, ['preset', 'name'], String(a.value == null ? '' : a.value));
+
       case 'preset/toggleSource': {
         var sources = state.preset.query.sources;
         var next;
@@ -472,21 +475,22 @@
   };
 
   var viewNav = function (state, d) {
-    var tab = function (route, label) {
-      return el('button', {
-        class: 'tab' + (state.route === route ? ' active' : ''),
-        disabled: route === 'table' && !state.dataset,
-        onclick: function () { d({ type: 'route/set', route: route }); }
-      }, label);
-    };
+    var ctl = state.route === 'table'
+      ? el('button', {
+          class: 'gear', title: 'Настройки: изменить пресет по умолчанию',
+          onclick: function () { d({ type: 'route/set', route: 'build' }); }
+        }, '⚙ Настройки')
+      : el('button', {
+          class: 'gear', disabled: !state.dataset,
+          onclick: function () { d({ type: 'route/set', route: 'table' }); }
+        }, '← К таблице');
     return el('header', { class: 'nav' },
       el('strong', {}, 'ds-webui'),
-      tab('build', 'Конструктор выборки'),
-      tab('table', 'Таблица'),
       el('span', { class: 'spacer' }),
       state.dataDir
         ? el('span', { class: 'muted src-dir' }, 'данные: ' + state.dataDir + '/')
-        : el('span', { class: 'muted src-dir warn' }, 'нет data/ и sample-data/')
+        : el('span', { class: 'muted src-dir warn' }, 'нет data/ и sample-data/'),
+      ctl
     );
   };
 
@@ -599,11 +603,23 @@
 
       state.buildError ? el('p', { class: 'error' }, state.buildError) : null,
 
+      el('div', { class: 'row' },
+        el('label', { class: 'field small' }, 'Имя пресета',
+          el('input', {
+            type: 'text', value: preset.name || '',
+            onchange: function (e) { d({ type: 'preset/setName', value: e.target.value }); }
+          })
+        ),
+        el('span', { class: 'muted' },
+          'изменения сохраняются автоматически как пресет по умолчанию (localStorage); '
+          + '«Скачать пресет» — отдельный файл')
+      ),
+
       el('div', { class: 'actions' },
         el('button', {
           class: 'primary', disabled: state.building || !chosen.length,
           onclick: function () { buildDataset(store); }
-        }, state.building ? 'Строю…' : 'Построить таблицу'),
+        }, state.building ? 'Строю…' : 'Применить и открыть таблицу'),
         el('button', { onclick: function () { savePreset(state.preset); } }, 'Скачать пресет'),
         el('label', { class: 'file-btn' }, 'Загрузить пресет',
           el('input', {
@@ -762,6 +778,17 @@
       return;
     }
 
+    // первое построение (пресет по умолчанию) — без мелькания конструктора
+    if (state.building && !state.dataset) {
+      clear(root);
+      root.appendChild(viewNav(state, d));
+      root.appendChild(el('section', { class: 'page' },
+        el('p', { class: 'muted' }, 'Открываю таблицу по пресету по умолчанию…')));
+      lastRoute = null;
+      lastDatasetSig = null;
+      return;
+    }
+
     var datasetSig = state.dataset ? state.dataset.columns.join('|') + ':' + state.dataset.rows.length : null;
     var shellChanged = state.route !== lastRoute || datasetSig !== lastDatasetSig;
 
@@ -790,6 +817,9 @@
     });
     var saved = storage.get('preset');
     store.dispatch({ type: 'preset/set', preset: saved || basePreset() });
+    // применить пресет по умолчанию и сразу открыть таблицу; при ошибке
+    // (нет данных / нет источника) buildDataset оставит пользователя в конструкторе
+    buildDataset(store);
   });
 
 })();
