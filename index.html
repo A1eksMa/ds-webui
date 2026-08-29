@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ds-webui</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
+    header { border-bottom: 1px solid #ccc; padding-bottom: .5rem; margin-bottom: 1rem; }
+    nav a { margin-right: 1rem; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .muted { color: #666; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 2px 6px; text-align: left; }
+    td.null { color: #999; font-style: italic; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>ds-webui</strong>
+    <nav>
+      <a href="#build">Конструктор выборки</a>
+      <a href="#table">Таблица</a>
+    </nav>
+  </header>
+
+  <section id="page-build" class="page">
+    <h1>Конструктор выборки</h1>
+    <p class="muted">Каркас. Здесь будет выбор источников/показателей, связок и фильтров;
+      сохранение пресета.</p>
+    <div id="manifest-view"></div>
+  </section>
+
+  <section id="page-table" class="page">
+    <h1>Таблица</h1>
+    <p class="muted">Каркас. Зона фильтров + HTML-таблица + выгрузка в Excel.</p>
+    <div id="freshness"></div>
+    <div id="table-view"></div>
+  </section>
+
+  <!-- Данные (из ds get / поллера). При file:// подгружаются динамической инъекцией <script>,
+       здесь только манифест как точка входа. См. docs/contract.md -->
+  <script src="data/manifest.js" onerror="window.__DS_NO_DATA = true"></script>
+  <script src="app.js"></script>
+</body>
+</html>
