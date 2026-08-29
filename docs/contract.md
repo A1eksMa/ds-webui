@@ -3,9 +3,13 @@
 Единственная связь между проектами. `ds-webui` полагается только на формат ниже, никогда —
 на схему БД `ds`.
 
-Генератор — `ds get` (потребляет пресет, см. [preset](#пресет)). Файлы кладутся в `data/`
-рядом с `index.html`. Каждый — валидный JS, дописывающий в глобал; порядок загрузки не важен;
-повторная загрузка перезаписывает слот источника.
+**Кто что производит.** `ds get --preset <preset.json> --out <dir>` (ядро `ds`) отдаёт по
+одному **голому JSON** на источник. Обёртку в `.js` (`window.DS.sources[...] = <json>;`) и
+`manifest.js` строит **поллер** — ядро про браузер не знает. Референсная реализация этого
+шага и живой пример — [`../tools/gen_sample.py`](../tools/gen_sample.py) → [`../sample-data/`](../sample-data/).
+
+Файлы кладутся в `data/` рядом с `index.html`. Каждый — валидный JS, дописывающий в глобал;
+порядок загрузки не важен; повторная загрузка перезаписывает слот источника.
 
 ## `data/manifest.js`
 
@@ -14,38 +18,51 @@
 
 ```js
 window.DS_MANIFEST = {
-  generated_at: 1717372800,          // когда перестроен манифест (unix, сек)
-  db_max_cnt: 84213,                 // максимальный cnt в БД на момент генерации — для детекта лага
+  generated_at: 1706750000.0,        // когда перестроен манифест (unix, сек)
+  db_max_cnt: 21,                    // глобальный максимум cnt в БД на момент сборки (информационно)
   sources: [
     {
       name: "CRM",
       file: "CRM.js",
-      key: "customer_id",            // ключевой показатель источника (по нему LEFT JOIN внутри источника)
-      as_of: 1717200000,             // дата среза, на которую свёрнуто состояние
-      generated_at: 1717372800,      // когда сгенерирован этот файл источника
-      gen_max_cnt: 84010,            // cnt, до которого учтены данные (для бейджа "файл отстаёт от БД")
-      rows: 4200,
+      key: "customer_id",            // ключевой показатель (по нему LEFT JOIN внутри источника)
+      as_of: 1706745600.0,           // дата среза, на которую свёрнуто состояние
+      generated_at: 1706750000.0,    // когда сгенерирован этот файл источника
+      gen_max_cnt: 13,               // cnt, до которого учтены данные в файле (из meta.gen_max_cnt)
+      db_max_cnt: 21,                // ТЕКУЩИЙ максимум cnt ЭТОГО источника в БД
+      rows: 4,
       labels: ["email", "phone", "status"]   // колонки в файле (выбранные пресетом + вынужденные)
     }
   ]
 };
 ```
 
+**Детект устаревания:** `db_max_cnt > gen_max_cnt` у источника → файл отстаёт от БД, показать
+бейдж «пересобрать». Сравнение **пер-источниковое** — глобальный `db_max_cnt` для этого не
+годится (новые транзакции ERP не делают CRM устаревшим).
+
 ## `data/<Source>.js`
+
+Ровно то, что отдал `ds get`, обёрнутое в присваивание. `meta` — как в
+[`ds/docs/reference/get-output-format.md`](https://github.com/A1eksMa/ds/blob/main/docs/reference/get-output-format.md).
 
 ```js
 window.DS = window.DS || { sources: {} };
 window.DS.sources["CRM"] = {
-  meta: {
-    name: "CRM",
-    key: "customer_id",
-    as_of: 1717200000,
-    generated_at: 1717372800
+  "meta": {
+    "name": "CRM",
+    "key": "customer_id",
+    "as_of": 1706745600.0,
+    "generated_at": 1706750000.0,
+    "gen_max_cnt": 13,
+    "include_archive": false,
+    "rows": 4,
+    "labels": ["email", "phone", "status"]
   },
-  data: [
-    { customer_id: "101", email: "alice@example.com", phone: "+7-900-000-0001", status: "active" },
-    { customer_id: "102", email: "bob@example.com",   phone: null,              status: "active" },
-    { customer_id: "103", email: "carol@example.com", status: "blocked" }
+  "data": [
+    { "customer_id": "101", "email": "alice@example.com", "phone": "+7-900-000-0001", "status": "active" },
+    { "customer_id": "102", "email": "bob.new@example.com", "phone": "+7-900-000-0002", "status": "vip" },
+    { "customer_id": "103", "email": "carol@example.com", "phone": null, "status": "active" },
+    { "customer_id": "104", "email": "dave@example.com", "status": "active" }
   ]
 };
 ```
