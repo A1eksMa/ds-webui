@@ -2,19 +2,31 @@
 
 /*
  * Базовые пресеты, поставляемые с приложением (коммитятся).
- * Пользовательские пресеты — отдельные файлы, скачиваются/загружаются.
- * Формат — см. docs/contract.md (черновой).
+ * Пользовательские пресеты — отдельные .json, скачиваются / загружаются.
+ *
+ * Форма (см. docs/contract.md):
+ *   { name, query: { as_of, sources: { <src>: { labels: [...] } } },
+ *            view:  { joins: [ { left, left_field, right, right_field } ],
+ *                     column_filters: { <column>: <substring> } } }
+ *
+ * `query` — то, что понимает `ds get` (срез данных). `view` — только для UI
+ * (межисточниковый LEFT JOIN, базовые фильтры).
  */
 window.DS_PRESETS = [
   {
     name: 'base',
-    as_of: null,
-    sources: {
-      CRM: { labels: ['email', 'phone', 'status'], filters: {} },
-      ERP: { labels: ['price', 'stock'], filters: {} }
+    query: {
+      as_of: null,
+      sources: {
+        CRM: { labels: ['email', 'phone', 'status'] },
+        ERP: { labels: ['price', 'stock'] }
+      }
     },
-    joins: [
-      { left: 'CRM', left_field: 'customer_id', right: 'ERP', right_field: 'client_ref' }
-    ]
+    view: {
+      joins: [
+        { left: 'CRM', left_field: 'customer_id', right: 'ERP', right_field: 'client_ref' }
+      ],
+      column_filters: {}
+    }
   }
 ];

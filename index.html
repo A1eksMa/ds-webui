@@ -4,44 +4,38 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ds-webui</title>
-  <style>
-    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
-    header { border-bottom: 1px solid #ccc; padding-bottom: .5rem; margin-bottom: 1rem; }
-    nav a { margin-right: 1rem; }
-    .page { display: none; }
-    .page.active { display: block; }
-    .muted { color: #666; }
-    table { border-collapse: collapse; }
-    th, td { border: 1px solid #ddd; padding: 2px 6px; text-align: left; }
-    td.null { color: #999; font-style: italic; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <strong>ds-webui</strong>
-    <nav>
-      <a href="#build">Конструктор выборки</a>
-      <a href="#table">Таблица</a>
-    </nav>
-  </header>
+  <div id="app" class="app"><p class="muted" style="padding:1rem">Загрузка…</p></div>
 
-  <section id="page-build" class="page">
-    <h1>Конструктор выборки</h1>
-    <p class="muted">Каркас. Здесь будет выбор источников/показателей, связок и фильтров;
-      сохранение пресета.</p>
-    <div id="manifest-view"></div>
-  </section>
-
-  <section id="page-table" class="page">
-    <h1>Таблица</h1>
-    <p class="muted">Каркас. Зона фильтров + HTML-таблица + выгрузка в Excel.</p>
-    <div id="freshness"></div>
-    <div id="table-view"></div>
-  </section>
-
-  <!-- Данные (из ds get / поллера). При file:// подгружаются динамической инъекцией <script>,
-       здесь только манифест как точка входа. См. docs/contract.md -->
-  <script src="data/manifest.js" onerror="window.__DS_NO_DATA = true"></script>
+  <!--
+    Данные (из ds get / поллера) при file:// не забираются через fetch().
+    Манифест грузится инъекцией <script> с fallback data/ -> sample-data/.
+    Дальнейшие файлы источников подгружает app.js тем же способом. См. docs/contract.md
+  -->
+  <script>
+    window.DS = { sources: {} };
+    window.__ds = (function () {
+      var resolve;
+      var ready = new Promise(function (r) { resolve = r; });
+      function tryDir(dir, isLast) {
+        var s = document.createElement('script');
+        s.src = dir + '/manifest.js';
+        s.onload = function () {
+          resolve({ dataDir: dir, manifest: window.DS_MANIFEST || null });
+        };
+        s.onerror = function () {
+          if (isLast) resolve({ dataDir: null, manifest: null });
+          else tryDir('sample-data', true);
+        };
+        document.head.appendChild(s);
+      }
+      tryDir('data', false);
+      return { ready: ready };
+    })();
+  </script>
+  <script src="presets.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
