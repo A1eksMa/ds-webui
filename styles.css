@@ -93,8 +93,18 @@ input[type=text], select {
 .src.picked { border-color: var(--accent); }
 .src-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; cursor: pointer; }
 .src-name { font-weight: 600; }
-.labels { display: flex; gap: .8rem; flex-wrap: wrap; margin: .5rem 0 .2rem 1.6rem; }
-.lb, .chk { display: inline-flex; align-items: center; gap: .3rem; }
+.chk { display: inline-flex; align-items: center; gap: .3rem; }
+
+/* выбор отображаемых полей — вертикальным списком */
+.field-list { display: flex; flex-direction: column; gap: .15rem; margin: .5rem 0 .2rem 1.6rem; }
+.field-item { display: flex; align-items: center; gap: .4rem; padding: .1rem 0; }
+.field-item .field-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+.field-item.key .field-name { font-weight: 600; }
+.field-item .tag {
+  font-size: .7em; text-transform: uppercase; letter-spacing: .04em;
+  background: var(--head-bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0 .35rem; color: var(--muted);
+}
 
 .badge { font-size: .75em; padding: .1rem .5rem; border-radius: 999px; font-weight: 600; }
 .badge.stale { background: var(--stale-bg); color: var(--stale-fg); }

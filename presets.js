@@ -17,8 +17,9 @@ window.DS_PRESETS = [
     name: 'base',
     query: {
       as_of: null,
+      // ключевой показатель источника — обычное поле в списке; здесь он выбран
       sources: {
-        CRM: { labels: ['email', 'phone', 'status'] },
+        CRM: { labels: ['customer_id', 'email', 'phone', 'status'] },
         ERP: { labels: ['price', 'stock'] }
       }
     },

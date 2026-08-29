@@ -141,6 +141,9 @@
   // LEFT JOIN нескольких источников. selected: [{name, key, labels, data}].
   // joins: [{left, left_field, right, right_field}]. База — первый источник.
   // Колонки при >1 источнике квалифицируются как "<Source>.<label>".
+  // Ключевой показатель источника — обычное выбираемое поле: он попадает в
+  // колонки, только если присутствует в s.labels (иначе используется лишь для
+  // сопоставления при JOIN).
   var joinSources = function (selected, joins) {
     if (!selected.length) return { columns: [], rows: [] };
     var qualify = selected.length > 1;
@@ -149,18 +152,15 @@
     var base = selected[0];
     var rest = selected.slice(1);
 
-    var columns = [base.key]
-      .concat(base.labels.map(function (l) { return col(base.name, l); }))
+    var columns = base.labels.map(function (l) { return col(base.name, l); })
       .concat(rest.reduce(function (acc, s) {
         return acc.concat(s.labels.map(function (l) { return col(s.name, l); }));
       }, []));
 
     var rows = base.data.map(function (r) {
-      var o = {};
-      o[base.key] = r[base.key];
-      base.labels.forEach(function (l) { o[col(base.name, l)] = l in r ? r[l] : undefined; });
-      o.__match = {};
+      var o = { __match: {} };
       o.__match[base.name] = r;
+      base.labels.forEach(function (l) { o[col(base.name, l)] = l in r ? r[l] : undefined; });
       return o;
     });
 
@@ -322,14 +322,15 @@
         } else {
           var ms = manifestSource(state, a.name);
           next = Object.assign({}, sources);
-          next[a.name] = { labels: ms ? ms.labels.slice() : null };
+          // по умолчанию: ключ + все показатели
+          next[a.name] = { labels: ms ? [ms.key].concat(ms.labels) : null };
         }
         return setIn(state, ['preset', 'query', 'sources'], next);
       }
 
       case 'preset/toggleLabel': {
         var ms2 = manifestSource(state, a.source);
-        var all = ms2 ? ms2.labels : [];
+        var all = ms2 ? [ms2.key].concat(ms2.labels) : [];
         var cur = state.preset.query.sources[a.source].labels || all.slice();
         var labels = cur.indexOf(a.label) === -1
           ? all.filter(function (l) { return cur.indexOf(l) !== -1 || l === a.label; })
@@ -440,16 +441,23 @@
       }
       var selected = names.map(function (n) {
         var box = window.DS.sources[n];
-        var wanted = state.preset.query.sources[n].labels || box.meta.labels;
+        var key = box.meta.key || 'id';
+        var allow = [key].concat(box.meta.labels);           // ключ — тоже выбираемое поле
+        var wanted = state.preset.query.sources[n].labels || allow;
         return {
           name: n,
-          key: box.meta.key || 'id',
-          labels: wanted.filter(function (l) { return box.meta.labels.indexOf(l) !== -1; }),
+          key: key,
+          labels: wanted.filter(function (l) { return allow.indexOf(l) !== -1; }),
           data: box.data
         };
       });
+      var joined = joinSources(selected, state.preset.view.joins || []);
+      if (!joined.columns.length) {
+        store.dispatch({ type: 'build/error', message: 'Не выбрано ни одного поля для отображения' });
+        return;
+      }
       var dataset = applyFilters(
-        joinSources(selected, state.preset.view.joins || []),
+        joined,
         state.preset.view.column_filters || {}
       );
       store.dispatch({ type: 'build/success', dataset: dataset });
@@ -503,7 +511,18 @@
 
     var sourceRow = function (ms) {
       var picked = !!preset.query.sources[ms.name];
-      var wanted = picked ? (preset.query.sources[ms.name].labels || ms.labels) : [];
+      var fields = [ms.key].concat(ms.labels);            // ключ — обычное выбираемое поле
+      var wanted = picked ? (preset.query.sources[ms.name].labels || fields) : [];
+      var fieldBox = function (name, isKey) {
+        return el('label', { class: 'field-item' + (isKey ? ' key' : '') },
+          el('input', {
+            type: 'checkbox', checked: wanted.indexOf(name) !== -1,
+            onchange: function () { d({ type: 'preset/toggleLabel', source: ms.name, label: name }); }
+          }),
+          el('span', { class: 'field-name' }, name),
+          isKey ? el('span', { class: 'tag' }, 'ключ') : null
+        );
+      };
       return el('div', { class: 'src' + (picked ? ' picked' : '') },
         el('label', { class: 'src-head' },
           el('input', {
@@ -511,28 +530,20 @@
             onchange: function () { d({ type: 'preset/toggleSource', name: ms.name }); }
           }),
           el('span', { class: 'src-name' }, ms.name),
-          el('span', { class: 'muted' }, 'ключ ' + ms.key + ' · ' + ms.rows + ' строк · срез ' + fmtDate(ms.as_of)),
+          el('span', { class: 'muted' }, ms.rows + ' строк · срез ' + fmtDate(ms.as_of)),
           badge(ms)
         ),
-        picked ? el('div', { class: 'labels' }, ms.labels.map(function (lb) {
-          return el('label', { class: 'lb' },
-            el('input', {
-              type: 'checkbox', checked: wanted.indexOf(lb) !== -1,
-              onchange: function () { d({ type: 'preset/toggleLabel', source: ms.name, label: lb }); }
-            }),
-            lb
-          );
-        })) : null
+        picked ? el('div', { class: 'field-list' },
+          fieldBox(ms.key, true),
+          ms.labels.map(function (lb) { return fieldBox(lb, false); })
+        ) : null
       );
     };
 
-    // поля, доступные для join у источника: ключ + выбранные показатели
+    // поля, доступные для join у источника: ключ + все его показатели
     var fieldsOf = function (name) {
       var ms = mSources.find(function (s) { return s.name === name; });
-      if (!ms) return [];
-      var picked = preset.query.sources[name];
-      var labels = picked ? (picked.labels || ms.labels) : ms.labels;
-      return [ms.key].concat(labels);
+      return ms ? uniq([ms.key].concat(ms.labels)) : [];
     };
 
     var joinRow = function (j, i) {
@@ -558,7 +569,7 @@
     var pickedColumns = chosen.reduce(function (acc, name) {
       var ms = mSources.find(function (s) { return s.name === name; });
       if (!ms) return acc;
-      var labels = preset.query.sources[name].labels || ms.labels;
+      var labels = preset.query.sources[name].labels || [ms.key].concat(ms.labels);
       return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
     }, []);
 
