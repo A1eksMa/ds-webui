@@ -284,6 +284,33 @@
     ].join('\n');
   };
 
+  // Имя выгружаемого файла — по тому же неймингу, что и файлы, которые мониторит
+  // ds-loader: <source>_YYYY-MM-DD_HH-MM-SS_<micros>.<ext>. В роли <source> —
+  // имя пользователя (браузер системное имя не отдаёт, поэтому берётся из поля
+  // «автор» на панели таблицы; пусто -> "user"). Время — локальное, как у
+  // продьюсера (datetime.now()); микросекунды = миллисекунды, дополненные нулями.
+  var pad = function (n, width) {
+    var s = String(n);
+    while (s.length < (width || 2)) { s = '0' + s; }
+    return s;
+  };
+
+  var sanitizeAuthor = function (name) {
+    var s = String(name == null ? '' : name).trim()
+      .replace(/[_\s\/\\:*?"<>|]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return s || 'user';
+  };
+
+  var exportFilename = function (author, ext, when) {
+    var d = when || new Date();
+    var ts = pad(d.getFullYear(), 4) + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+      + '_' + pad(d.getHours()) + '-' + pad(d.getMinutes()) + '-' + pad(d.getSeconds())
+      + '_' + pad(d.getMilliseconds() * 1000, 6);
+    return sanitizeAuthor(author) + '_' + ts + '.' + ext;
+  };
+
   // ---------------------------------------------------------------------------
   // Store
   // ---------------------------------------------------------------------------
@@ -342,6 +369,7 @@
     manifest: null,
     dataDir: null,
     preset: null,
+    author: '',              // «источник» в имени выгружаемого файла
     building: false,
     buildError: null,
     dataset: null,
@@ -365,6 +393,9 @@
 
       case 'preset/setName':
         return setIn(state, ['preset', 'name'], String(a.value == null ? '' : a.value));
+
+      case 'ui/setAuthor':
+        return Object.assign({}, state, { author: String(a.value == null ? '' : a.value) });
 
       case 'preset/toggleSource': {
         var sources = state.preset.query.sources;
@@ -714,6 +745,13 @@
         'скрыть пустые колонки'
       ),
       el('span', { class: 'spacer' }),
+      el('label', { class: 'field small', title: 'подставляется в имя выгружаемого файла как «источник»' },
+        'Автор',
+        el('input', {
+          type: 'text', value: state.author, placeholder: 'user',
+          onchange: function (e) { d({ type: 'ui/setAuthor', value: e.target.value }); }
+        })
+      ),
       el('button', { onclick: function () { exportXls(store.getState()); } }, 'Выгрузить в Excel'),
       el('button', { onclick: function () { exportCsv(store.getState()); } }, 'CSV')
     );
@@ -815,14 +853,14 @@
   var exportXls = function (state) {
     if (!state.dataset) return;
     var e = exportDataset(state);
-    download('ds-export-' + state.preset.name + '.xls',
+    download(exportFilename(state.author, 'xls'),
       toXlsWorkbook(e.dataset, e.columns), 'application/vnd.ms-excel');
   };
 
   var exportCsv = function (state) {
     if (!state.dataset) return;
     var e = exportDataset(state);
-    download('ds-export-' + state.preset.name + '.csv', toCsv(e.dataset, e.columns), 'text/csv');
+    download(exportFilename(state.author, 'csv'), toCsv(e.dataset, e.columns), 'text/csv');
   };
 
   // ---------------------------------------------------------------------------
@@ -869,6 +907,7 @@
 
     if (state.route === 'table') renderGrid(state, d);
     if (state.preset) storage.set('preset', state.preset);
+    storage.set('author', state.author);
   };
 
   store.subscribe(render);
@@ -881,6 +920,10 @@
     });
     var saved = storage.get('preset');
     store.dispatch({ type: 'preset/set', preset: saved || basePreset() });
+    var savedAuthor = storage.get('author');
+    if (typeof savedAuthor === 'string') {
+      store.dispatch({ type: 'ui/setAuthor', value: savedAuthor });
+    }
     // применить пресет по умолчанию и сразу открыть таблицу; при ошибке
     // (нет данных / нет источника) buildDataset оставит пользователя в конструкторе
     buildDataset(store);
