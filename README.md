@@ -89,6 +89,7 @@ data/
 | `presets.js` | базовые пресеты |
 | `docs/contract.md` | файловый контракт `ds` → `ds-webui` |
 | `tools/gen_sample.py` | регенерация `sample-data/` из настоящего `ds get` |
+| `scripts/` | макросы офисного пакета: выгрузка листа (или только правок) в JSON для `ds-loader` — см. [`scripts/README.md`](scripts/README.md) |
 
 ## Статус
 
