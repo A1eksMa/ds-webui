@@ -218,18 +218,70 @@
       .join('\r\n');
   };
 
-  var toXlsHtml = function (dataset, columns) {
-    var esc = function (v) {
-      return String(v == null ? '' : v).replace(/[&<>]/g, function (c) {
-        return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
-      });
-    };
-    var head = '<tr>' + columns.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr>';
+  var xmlEsc = function (v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  var xlsTable = function (id, dataset, columns) {
+    var head = '<tr>' + columns.map(function (c) {
+      return '<th>' + xmlEsc(c) + '</th>';
+    }).join('') + '</tr>';
     var body = dataset.rows.map(function (r) {
-      return '<tr>' + columns.map(function (c) { return '<td>' + esc(r[c]) + '</td>'; }).join('') + '</tr>';
+      return '<tr>' + columns.map(function (c) {
+        return '<td>' + xmlEsc(r[c]) + '</td>';
+      }).join('') + '</tr>';
     }).join('');
-    return '<html><head><meta charset="utf-8"></head><body><table border="1">'
-      + head + body + '</table></body></html>';
+    return '<table id="' + id + '" border="1">' + head + body + '</table>';
+  };
+
+  // Одна запись <x:ExcelWorksheet> в MSO-острове. opts: {selected, hidden, protect}
+  var xlsSheetMeta = function (name, opts) {
+    var o = [];
+    if (opts.selected) { o.push('    <x:Selected/>'); }
+    if (opts.hidden) { o.push('    <x:Visible>SheetHidden</x:Visible>'); }
+    if (opts.protect) {
+      // Пустой пароль: защита включена, снимается без пароля.
+      o.push('    <x:ProtectContents>True</x:ProtectContents>');
+      o.push('    <x:ProtectObjects>True</x:ProtectObjects>');
+      o.push('    <x:ProtectScenarios>True</x:ProtectScenarios>');
+    }
+    return [
+      '   <x:ExcelWorksheet>',
+      '    <x:Name>' + xmlEsc(name) + '</x:Name>',
+      '    <x:WorksheetOptions>',
+      o.join('\n'),
+      '    </x:WorksheetOptions>',
+      '   </x:ExcelWorksheet>'
+    ].join('\n');
+  };
+
+  // Книга Excel из двух листов ("user" видимый, "system" — скрытый и защищённый).
+  // Формат — legacy Excel-HTML с MSO-островом: имена листов / скрытие / защиту
+  // читает настольный Microsoft Excel. LibreOffice / Google Sheets остров
+  // игнорируют — там будут два обычных листа с теми же данными.
+  var toXlsWorkbook = function (dataset, columns) {
+    return [
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office"',
+      '      xmlns:x="urn:schemas-microsoft-com:office:excel"',
+      '      xmlns="http://www.w3.org/TR/REC-html40">',
+      '<head><meta charset="utf-8">',
+      '<!--[if gte mso 9]><xml>',
+      ' <x:ExcelWorkbook>',
+      '  <x:ExcelWorksheets>',
+      xlsSheetMeta('user', { selected: true }),
+      xlsSheetMeta('system', { hidden: true, protect: true }),
+      '  </x:ExcelWorksheets>',
+      '  <x:ActiveSheet>0</x:ActiveSheet>',
+      ' </x:ExcelWorkbook>',
+      '</xml><![endif]-->',
+      '</head>',
+      '<body>',
+      xlsTable('user', dataset, columns),
+      xlsTable('system', dataset, columns),
+      '</body></html>'
+    ].join('\n');
   };
 
   // ---------------------------------------------------------------------------
@@ -763,7 +815,8 @@
   var exportXls = function (state) {
     if (!state.dataset) return;
     var e = exportDataset(state);
-    download('ds-export-' + state.preset.name + '.xls', toXlsHtml(e.dataset, e.columns), 'application/vnd.ms-excel');
+    download('ds-export-' + state.preset.name + '.xls',
+      toXlsWorkbook(e.dataset, e.columns), 'application/vnd.ms-excel');
   };
 
   var exportCsv = function (state) {
