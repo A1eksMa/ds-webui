@@ -7,10 +7,10 @@
  * Форма (см. docs/contract.md):
  *   { name, query: { as_of, sources: { <src>: { labels: [...] } } },
  *            view:  { joins: [ { left, left_field, right, right_field } ],
- *                     column_filters: { <column>: <substring> } } }
+ *                     conditions: [ { field, op, value } ] } }
  *
  * `query` — то, что понимает `ds get` (срез данных). `view` — только для UI
- * (межисточниковый LEFT JOIN, базовые фильтры).
+ * (межисточниковый LEFT JOIN, условия выборки, сужающие датасет при построении).
  */
 window.DS_PRESETS = [
   {
@@ -27,7 +27,7 @@ window.DS_PRESETS = [
       joins: [
         { left: 'CRM', left_field: 'customer_id', right: 'ERP', right_field: 'client_ref' }
       ],
-      column_filters: {}
+      conditions: []
     }
   }
 ];

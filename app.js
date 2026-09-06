@@ -199,6 +199,65 @@
     return { columns: dataset.columns, rows: rows };
   };
 
+  // --- условия выборки (задаются в конструкторе, сужают датасет при построении) ---
+  // Оператор -> подпись; порядок = порядок в выпадающем списке.
+  var OPERATORS = [
+    ['contains', 'содержит'],
+    ['not_contains', 'не содержит'],
+    ['eq', 'равно'],
+    ['ne', 'не равно'],
+    ['starts', 'начинается с'],
+    ['ends', 'заканчивается на'],
+    ['gt', '> (число)'],
+    ['gte', '≥ (число)'],
+    ['lt', '< (число)'],
+    ['lte', '≤ (число)'],
+    ['empty', 'пусто'],
+    ['not_empty', 'не пусто']
+  ];
+  var OP_IDS = OPERATORS.map(function (o) { return o[0]; });
+  var OP_NO_VALUE = { empty: 1, not_empty: 1 };
+
+  var matchCondition = function (cell, cond) {
+    var op = cond.op;
+    var isEmpty = cell == null || cell === '';
+    if (op === 'empty') return isEmpty;
+    if (op === 'not_empty') return !isEmpty;
+    var s = String(cell == null ? '' : cell).toLowerCase();
+    var n = String(cond.value == null ? '' : cond.value).trim().toLowerCase();
+    switch (op) {
+      case 'contains': return s.indexOf(n) !== -1;
+      case 'not_contains': return s.indexOf(n) === -1;
+      case 'eq': return s === n;
+      case 'ne': return s !== n;
+      case 'starts': return s.indexOf(n) === 0;
+      case 'ends': return n === '' || s.slice(-n.length) === n;
+      case 'gt': case 'gte': case 'lt': case 'lte': {
+        if (isEmpty) return false;                 // пустая ячейка — не число
+        var a = Number(cell), b = Number(cond.value);
+        if (isNaN(a) || isNaN(b)) return false;
+        return op === 'gt' ? a > b : op === 'gte' ? a >= b : op === 'lt' ? a < b : a <= b;
+      }
+      default: return true;
+    }
+  };
+
+  var conditionActive = function (c) {
+    if (!c || !c.field) return false;
+    if (OP_NO_VALUE[c.op]) return true;
+    return String(c.value == null ? '' : c.value).trim() !== '';
+  };
+
+  // Условия применяются последовательно (AND): строка проходит, если удовлетворяет всем.
+  var applyConditions = function (dataset, conditions) {
+    var active = (conditions || []).filter(conditionActive);
+    if (!active.length) return dataset;
+    var rows = dataset.rows.filter(function (r) {
+      return active.every(function (c) { return matchCondition(r[c.field], c); });
+    });
+    return { columns: dataset.columns, rows: rows };
+  };
+
   var visibleColumns = function (dataset, hideEmpty) {
     if (!hideEmpty) return dataset.columns;
     return dataset.columns.filter(function (c) {
@@ -330,7 +389,7 @@
 
   var basePreset = function () {
     return JSON.parse(JSON.stringify((window.DS_PRESETS && window.DS_PRESETS[0]) || {
-      name: 'base', query: { as_of: null, sources: {} }, view: { joins: [], column_filters: {} }
+      name: 'base', query: { as_of: null, sources: {} }, view: { joins: [], conditions: [] }
     }));
   };
 
@@ -358,10 +417,32 @@
             right: j.right || '', right_field: j.right_field || ''
           };
         }) : [],
-        column_filters: (view.column_filters && typeof view.column_filters === 'object')
-          ? Object.assign({}, view.column_filters) : {}
+        conditions: normalizeConditions(view)
       }
     };
+  };
+
+  // view.conditions [{field, op, value}] + миграция старого view.column_filters
+  // ({column: substring} -> оператор contains).
+  var normalizeConditions = function (view) {
+    var raw = Array.isArray(view.conditions) ? view.conditions : [];
+    var out = raw.map(function (c) {
+      c = c && typeof c === 'object' ? c : {};
+      return {
+        field: typeof c.field === 'string' ? c.field : '',
+        op: OP_IDS.indexOf(c.op) !== -1 ? c.op : 'contains',
+        value: c.value == null ? '' : String(c.value)
+      };
+    }).filter(function (c) { return c.field !== '' || c.value !== ''; });
+    if (view.column_filters && typeof view.column_filters === 'object') {
+      Object.keys(view.column_filters).forEach(function (col) {
+        var v = view.column_filters[col];
+        if (v != null && String(v).trim() !== '') {
+          out.push({ field: col, op: 'contains', value: String(v) });
+        }
+      });
+    }
+    return out;
   };
 
   var initialState = {
@@ -443,12 +524,19 @@
         return setIn(state, ['preset', 'view', 'joins'],
           state.preset.view.joins.filter(function (_, i) { return i !== a.index; }));
 
-      case 'preset/setColumnFilter': {
-        var cf = Object.assign({}, state.preset.view.column_filters);
-        if (a.value && a.value.trim()) cf[a.column] = a.value;
-        else delete cf[a.column];
-        return setIn(state, ['preset', 'view', 'column_filters'], cf);
-      }
+      case 'preset/addCondition':
+        return setIn(state, ['preset', 'view', 'conditions'],
+          state.preset.view.conditions.concat([{ field: '', op: 'contains', value: '' }]));
+
+      case 'preset/updateCondition':
+        return setIn(state, ['preset', 'view', 'conditions'],
+          state.preset.view.conditions.map(function (c, i) {
+            return i === a.index ? Object.assign({}, c, a.patch) : c;
+          }));
+
+      case 'preset/removeCondition':
+        return setIn(state, ['preset', 'view', 'conditions'],
+          state.preset.view.conditions.filter(function (_, i) { return i !== a.index; }));
 
       case 'build/start':
         return Object.assign({}, state, { building: true, buildError: null });
@@ -539,10 +627,7 @@
         store.dispatch({ type: 'build/error', message: 'Не выбрано ни одного поля для отображения' });
         return;
       }
-      var dataset = applyFilters(
-        joined,
-        state.preset.view.column_filters || {}
-      );
+      var dataset = applyConditions(joined, state.preset.view.conditions || []);
       store.dispatch({ type: 'build/success', dataset: dataset });
       store.dispatch({ type: 'route/set', route: 'table' });
     });
@@ -656,6 +741,27 @@
       return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
     }, []);
 
+    var conditionRow = function (cond, i) {
+      var patch = function (p) { d({ type: 'preset/updateCondition', index: i, patch: p }); };
+      return el('div', { class: 'condition' },
+        el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
+          [el('option', { value: '' }, 'поле…')].concat(pickedColumns.map(function (c) {
+            return el('option', { value: c, selected: c === cond.field }, c);
+          }))),
+        el('select', { onchange: function (e) { patch({ op: e.target.value }); } },
+          OPERATORS.map(function (o) {
+            return el('option', { value: o[0], selected: o[0] === cond.op }, o[1]);
+          })),
+        el('input', {
+          type: 'text', class: 'cond-value', value: cond.value || '',
+          placeholder: OP_NO_VALUE[cond.op] ? '—' : 'значение',
+          disabled: !!OP_NO_VALUE[cond.op],
+          onchange: function (e) { patch({ value: e.target.value }); }
+        }),
+        el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeCondition', index: i }); } }, '✕')
+      );
+    };
+
     return el('section', { class: 'page build' },
       el('h1', {}, 'Конструктор выборки'),
 
@@ -684,15 +790,11 @@
       ) : null,
 
       pickedColumns.length ? el('div', {},
-        el('h2', {}, 'Базовые фильтры (подстрока, применяются при построении)'),
-        el('div', { class: 'filters' }, pickedColumns.map(function (c) {
-          return el('label', { class: 'field small' }, c,
-            el('input', {
-              type: 'text', value: preset.view.column_filters[c] || '',
-              onchange: function (e) { d({ type: 'preset/setColumnFilter', column: c, value: e.target.value }); }
-            })
-          );
-        }))
+        el('h2', {}, 'Условия (сужают выборку при построении)'),
+        el('div', { class: 'conditions' }, preset.view.conditions.map(conditionRow)),
+        el('button', { class: 'link', onclick: function () { d({ type: 'preset/addCondition' }); } }, '+ условие'),
+        el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
+          'применяются по порядку (И) при построении — на «Таблице» останутся только подходящие строки')
       ) : null,
 
       state.buildError ? el('p', { class: 'error' }, state.buildError) : null,

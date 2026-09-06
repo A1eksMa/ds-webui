@@ -114,7 +114,12 @@ input[type=text], select {
 .joins { display: flex; flex-direction: column; gap: .4rem; }
 .join { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
 .join .dot, .join .eq { color: var(--muted); font-weight: 700; }
-.filters { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+/* build: условия выборки */
+.conditions { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .4rem; }
+.condition { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.condition .cond-value { min-width: 10rem; }
+.condition .cond-value:disabled { opacity: .45; }
 
 /* table */
 .toolbar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: .5rem 0; }
