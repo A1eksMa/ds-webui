@@ -118,8 +118,16 @@ input[type=text], select {
 /* build: условия выборки */
 .conditions { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .4rem; }
 .condition { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.condition.has-list { align-items: flex-start; }
 .condition .cond-value { min-width: 10rem; }
 .condition .cond-value:disabled { opacity: .45; }
+.cond-list-wrap { display: flex; flex-direction: column; gap: .25rem; }
+.cond-list {
+  font: inherit; color: inherit; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 5px; padding: .3rem .45rem;
+  min-width: 18rem; resize: vertical;
+}
+.cond-list-tools { display: flex; align-items: center; gap: .6rem; font-size: .85em; }
 
 /* table */
 .toolbar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: .5rem 0; }

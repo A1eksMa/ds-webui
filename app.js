@@ -115,6 +115,19 @@
     });
   };
 
+  // Прочитать текст из буфера обмена (нужен жест пользователя + разрешение).
+  // При отказе/недоступности — уведомить и дать вставить вручную (Ctrl+V).
+  var pasteFromClipboard = function (cb) {
+    var fail = function () {
+      alert('Не удалось прочитать буфер обмена. Вставьте список вручную (Ctrl+V) в поле.');
+    };
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (t) { if (t && t.trim()) cb(t); }, fail);
+    } else {
+      fail();
+    }
+  };
+
   var storage = {
     get: function (key) {
       try { return JSON.parse(localStorage.getItem('ds-webui:' + key)); }
@@ -206,6 +219,8 @@
     ['not_contains', 'не содержит'],
     ['eq', 'равно'],
     ['ne', 'не равно'],
+    ['in', 'в списке'],
+    ['not_in', 'не в списке'],
     ['starts', 'начинается с'],
     ['ends', 'заканчивается на'],
     ['gt', '> (число)'],
@@ -217,6 +232,15 @@
   ];
   var OP_IDS = OPERATORS.map(function (o) { return o[0]; });
   var OP_NO_VALUE = { empty: 1, not_empty: 1 };
+  var OP_LIST = { in: 1, not_in: 1 };            // значение — список (одно на строку / через запятую)
+
+  // "id1, id2\n id3 ; id4" -> ["id1","id2","id3","id4"] (trim, lower, без пустых)
+  var parseList = function (raw) {
+    return String(raw == null ? '' : raw)
+      .split(/[\n,;\t]+/)
+      .map(function (x) { return x.trim().toLowerCase(); })
+      .filter(Boolean);
+  };
 
   var matchCondition = function (cell, cond) {
     var op = cond.op;
@@ -230,6 +254,12 @@
       case 'not_contains': return s.indexOf(n) === -1;
       case 'eq': return s === n;
       case 'ne': return s !== n;
+      case 'in': case 'not_in': {
+        var list = parseList(cond.value);
+        if (!list.length) return op === 'not_in';       // пустой список: in — ничего, not_in — всё
+        var hit = list.indexOf(s) !== -1;
+        return op === 'in' ? hit : !hit;
+      }
       case 'starts': return s.indexOf(n) === 0;
       case 'ends': return n === '' || s.slice(-n.length) === n;
       case 'gt': case 'gte': case 'lt': case 'lte': {
@@ -245,6 +275,7 @@
   var conditionActive = function (c) {
     if (!c || !c.field) return false;
     if (OP_NO_VALUE[c.op]) return true;
+    if (OP_LIST[c.op]) return parseList(c.value).length > 0;
     return String(c.value == null ? '' : c.value).trim() !== '';
   };
 
@@ -743,7 +774,38 @@
 
     var conditionRow = function (cond, i) {
       var patch = function (p) { d({ type: 'preset/updateCondition', index: i, patch: p }); };
-      return el('div', { class: 'condition' },
+
+      var valueCtl;
+      if (OP_LIST[cond.op]) {
+        valueCtl = el('div', { class: 'cond-list-wrap' },
+          el('textarea', {
+            class: 'cond-list', rows: 3,
+            placeholder: 'значения: по одному в строке или через запятую',
+            onchange: function (e) { patch({ value: e.target.value }); }
+          }, cond.value || ''),
+          el('div', { class: 'cond-list-tools' },
+            el('button', {
+              class: 'link', type: 'button',
+              onclick: function () {
+                pasteFromClipboard(function (text) {
+                  var cur = cond.value || '';
+                  patch({ value: cur.trim() ? cur.replace(/\s+$/, '') + '\n' + text : text });
+                });
+              }
+            }, 'Вставить из буфера'),
+            el('span', { class: 'muted' }, parseList(cond.value).length + ' знач.')
+          )
+        );
+      } else {
+        valueCtl = el('input', {
+          type: 'text', class: 'cond-value', value: cond.value || '',
+          placeholder: OP_NO_VALUE[cond.op] ? '—' : 'значение',
+          disabled: !!OP_NO_VALUE[cond.op],
+          onchange: function (e) { patch({ value: e.target.value }); }
+        });
+      }
+
+      return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
         el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
           [el('option', { value: '' }, 'поле…')].concat(pickedColumns.map(function (c) {
             return el('option', { value: c, selected: c === cond.field }, c);
@@ -752,12 +814,7 @@
           OPERATORS.map(function (o) {
             return el('option', { value: o[0], selected: o[0] === cond.op }, o[1]);
           })),
-        el('input', {
-          type: 'text', class: 'cond-value', value: cond.value || '',
-          placeholder: OP_NO_VALUE[cond.op] ? '—' : 'значение',
-          disabled: !!OP_NO_VALUE[cond.op],
-          onchange: function (e) { patch({ value: e.target.value }); }
-        }),
+        valueCtl,
         el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeCondition', index: i }); } }, '✕')
       );
     };
