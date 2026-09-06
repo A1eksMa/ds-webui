@@ -115,6 +115,19 @@ input[type=text], select {
 .join { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
 .join .dot, .join .eq { color: var(--muted); font-weight: 700; }
 
+/* build: сущности (столбцы таблицы) */
+.entities { display: flex; flex-direction: column; gap: .5rem; }
+.entity { border: 1px solid var(--border); border-radius: 8px; padding: .5rem .6rem; }
+.entity-head { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.entity-head .ent-alias { min-width: 10rem; }
+.entity-body { margin: .4rem 0 .2rem; }
+.entity-inputs { display: flex; flex-direction: column; gap: .3rem; margin: .2rem 0; }
+.entity-input { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.entity-input .ent-weight { width: 4.5rem; }
+.entity-format { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: .3rem; }
+.entity-format .field.small input, .entity-format .field.small select { min-width: 5rem; }
+.entity .ent-sep { width: 6rem; margin-left: .35rem; }
+
 /* build: условия выборки */
 .conditions { display: flex; flex-direction: column; gap: .4rem; margin-bottom: .4rem; }
 .condition { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
@@ -184,6 +197,10 @@ table.data .col-filter-field.dirty .col-filter-apply { color: var(--accent); }
 table.data tbody tr:nth-child(even) { background: var(--row-alt); }
 table.data td.del { color: var(--del); font-style: italic; }
 table.data td.empty::after { content: ""; }
+table.data td.unparsed {
+  background: var(--stale-bg); color: var(--stale-fg);
+  text-decoration: underline dotted; cursor: help;
+}
 table.data tr.grp td { background: var(--head-bg); cursor: pointer; font-weight: 500; }
 table.data tr.grp .caret { display: inline-block; width: 1em; color: var(--muted); }
 table.data tr.member td:first-child { padding-left: 1.5rem; }

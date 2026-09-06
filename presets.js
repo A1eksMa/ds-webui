@@ -6,11 +6,14 @@
  *
  * Форма (см. docs/contract.md):
  *   { name, query: { as_of, sources: { <src>: { labels: [...] } } },
- *            view:  { joins: [ { left, left_field, right, right_field } ],
- *                     conditions: [ { field, op, value } ] } }
+ *            view:  { joins:      [ { left, left_field, right, right_field } ],
+ *                     conditions: [ { field, op, value } ],
+ *                     entities:   [ { name, type, parse, format,
+ *                                     from: { kind: "field"|"resolve"|"derived", ... } } ] } }
  *
  * `query` — то, что понимает `ds get` (срез данных). `view` — только для UI
- * (межисточниковый LEFT JOIN, условия выборки, сужающие датасет при построении).
+ * (LEFT JOIN, условия выборки при построении, сущности = столбцы таблицы:
+ *  разрешение коллизий по весам, парсинг типов, формат, порядок).
  */
 window.DS_PRESETS = [
   {
@@ -27,7 +30,8 @@ window.DS_PRESETS = [
       joins: [
         { left: 'CRM', left_field: 'customer_id', right: 'ERP', right_field: 'client_ref' }
       ],
-      conditions: []
+      conditions: [],
+      entities: []
     }
   }
 ];

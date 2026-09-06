@@ -28,6 +28,33 @@ tar -xzf ds-webui-<version>.tar.gz -C /path/to/target/folder
 
 ---
 
+## 0.6.0a1 — `ds-webui-0.6.0a1.tar.gz`
+
+Слой формирования сущностей в «Конструкторе» — браузерный Level 2.
+
+- Новый шаг **«Сущности (столбцы таблицы)»**: из выбранных полей собираются итоговые
+  столбцы. Три вида (`from.kind`):
+  - `field` — поле как есть;
+  - `resolve` — разрешение коллизии: несколько входов, **веса доверия задаёт пользователь**
+    (в пресете), победитель — наибольший вес среди присутствующих; при равных весах — по
+    порядку входов; `null_wins` — `null` (DELETE) из весомого источника побеждает. Тайбрейк
+    по `dt`/`cnt` не поддержан (их нет в `ds get`);
+  - `derived` — производная: `sum`/`avg`/`min`/`max`/`concat`/`first_nonempty`/`count_nonempty`.
+- Каждая сущность: `name` (алиас/заголовок), `type` (`text`/`number`/`date`/`bool` — задаёт
+  парсинг строки; промах → сырой текст с подсветкой `unparsed`, в сортировке — в конце),
+  `format` (`width`/`align`/`font_size`), `parse` (формат даты, токены bool, десятичный
+  разделитель). Порядок сущностей = порядок столбцов (стрелки ↑/↓).
+- Пресет: `view.entities: [ … ]`. Пусто → неявные 1:1-сущности (обратная совместимость).
+  Условия `view.conditions` теперь фильтруют столбцы-сущности.
+- Конвейер `buildDataset`: `joinSources` → `resolveEntities` → `parseTypes` (`__k` —
+  типизированный ключ сортировки, `__u` — промах) → `applyConditions`. Сортировка на
+  «Таблице» — по `__k` (даты хронологически, числа численно). `<colgroup>` для ширин.
+- `app.js` (parseNum/parseDate/formatDate/parseBool/typeCell/resolveCell/resolveEntities/
+  parseTypes/normalizeEntities, редьюсер `preset/*Entity*`, секция и `entityRow` в
+  «Конструкторе», `renderGrid`/`cellNode`/`applySort`), `styles.css`, `presets.js`,
+  `docs/contract.md`, `README`.
+- Гарнес `entity_test.js`: 49/49.
+
 ## 0.5.0a1 — `ds-webui-0.5.0a1.tar.gz`
 
 Расширенный фильтр и сортировка на странице «Таблица».

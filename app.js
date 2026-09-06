@@ -326,12 +326,274 @@
     if (!sort || !sort.col) return rows;
     var dir = sort.dir === 'desc' ? -1 : 1;
     return rows.map(function (r, i) { return [r, i]; }).sort(function (x, y) {
-      var av = x[0][sort.col], bv = y[0][sort.col];
+      // ключ сортировки: типизированный (row.__k) — число для number/date, строка для text
+      var kx = x[0].__k ? x[0].__k[sort.col] : undefined;
+      var ky = y[0].__k ? y[0].__k[sort.col] : undefined;
+      var av = kx !== undefined ? kx : x[0][sort.col];
+      var bv = ky !== undefined ? ky : y[0][sort.col];
       var ae = av == null || av === '', be = bv == null || bv === '';
-      if (ae || be) return ae && be ? x[1] - y[1] : (ae ? 1 : -1);   // пустые — всегда в конец
-      var c = compareValues(av, bv);
+      if (ae || be) return ae && be ? x[1] - y[1] : (ae ? 1 : -1);   // пустые/непарсибельные — в конец
+      var c = (typeof av === 'number' && typeof bv === 'number')
+        ? (av < bv ? -1 : av > bv ? 1 : 0) : compareValues(av, bv);
       return c !== 0 ? c * dir : x[1] - y[1];                        // стабильность
     }).map(function (p) { return p[0]; });
+  };
+
+  // =========================================================================
+  // Сущности: формирование столбцов таблицы из выбранных полей (браузерный Level 2)
+  // =========================================================================
+
+  var ENTITY_TYPES = [['text', 'текст'], ['number', 'число'], ['date', 'дата'], ['bool', 'логич.']];
+  var ENTITY_KINDS = [['field', 'поле'], ['resolve', 'коллизия'], ['derived', 'производная']];
+  var DERIVED_OPS = [
+    ['sum', 'сумма'], ['avg', 'среднее'], ['min', 'минимум'], ['max', 'максимум'],
+    ['concat', 'склейка'], ['first_nonempty', 'первое непустое'], ['count_nonempty', 'кол-во непустых']
+  ];
+  var _ENT_TYPE = { text: 1, number: 1, date: 1, bool: 1 };
+  var _ENT_KIND = { field: 1, resolve: 1, derived: 1 };
+  var _DERIVED_OP = { sum: 1, avg: 1, min: 1, max: 1, concat: 1, first_nonempty: 1, count_nonempty: 1 };
+  var _DATE_TOKENS = /YYYY|MM|DD|HH|mm|ss/g;
+
+  var _pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
+  var _swap = function (arr, i, j) {
+    if (i < 0 || j < 0 || i >= arr.length || j >= arr.length) return arr;
+    var out = arr.slice(); var t = out[i]; out[i] = out[j]; out[j] = t; return out;
+  };
+
+  // "1 234,56" / "1,234.56" / "99.00" -> число. Разделитель тысяч отбрасывается,
+  // десятичный — последний из . или , (или явный opts.decimal).
+  var parseNum = function (raw, opts) {
+    if (raw == null) return { ok: false, value: null };
+    var s = String(raw).replace(/[\s  ]/g, '').replace(/[^0-9.,eE+-]/g, '');
+    if (!/\d/.test(s)) return { ok: false, value: null };
+    var dec = (opts && opts.decimal) || 'auto';
+    var lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+    var sep = dec === ',' ? ',' : dec === '.' ? '.' : (lc > ld ? ',' : (ld > -1 ? '.' : ''));
+    var i = sep ? s.lastIndexOf(sep) : -1;
+    if (i !== -1) {
+      s = s.slice(0, i).replace(/[.,]/g, '') + '.' + s.slice(i + 1).replace(/[.,]/g, '');
+    } else {
+      s = s.replace(/[.,]/g, '');
+    }
+    var n = Number(s);
+    return isFinite(n) ? { ok: true, value: n } : { ok: false, value: null };
+  };
+
+  var _mkDate = function (Y, M, D, h, m, s) {
+    Y = +Y; M = +M; D = +D;
+    var ms = Date.UTC(Y, M - 1, D, +(h || 0), +(m || 0), +(s || 0));
+    var d = new Date(ms);
+    if (isNaN(ms) || d.getUTCFullYear() !== Y || d.getUTCMonth() !== M - 1 || d.getUTCDate() !== D) {
+      return { ok: false, ms: null };
+    }
+    return { ok: true, ms: ms };
+  };
+
+  // fmt === 'auto' — пробуем распространённые формы; иначе токенный шаблон
+  // (YYYY MM DD HH mm ss с любыми разделителями). Всё в UTC — детерминировано.
+  var parseDate = function (raw, fmt) {
+    if (raw == null) return { ok: false, ms: null };
+    var s = String(raw).trim();
+    if (s === '') return { ok: false, ms: null };
+    fmt = fmt || 'auto';
+    if (fmt !== 'auto') {
+      var toks = [];
+      var reStr = fmt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(_DATE_TOKENS, function (t) {
+        toks.push(t); return t === 'YYYY' ? '(\\d{4})' : '(\\d{1,2})';
+      });
+      var mm = s.match(new RegExp('^' + reStr));
+      if (!mm) return { ok: false, ms: null };
+      var v = { YYYY: 1970, MM: 1, DD: 1, HH: 0, mm: 0, ss: 0 };
+      toks.forEach(function (t, i) { v[t] = +mm[i + 1]; });
+      return _mkDate(v.YYYY, v.MM, v.DD, v.HH, v.mm, v.ss);
+    }
+    if (/^\d{9,13}$/.test(s)) {
+      var num = Number(s);
+      return isFinite(num) ? { ok: true, ms: s.length <= 10 ? num * 1000 : num } : { ok: false, ms: null };
+    }
+    var m;
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) return _mkDate(m[1], m[2], m[3], m[4], m[5], m[6]);
+    m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) return _mkDate(m[3], m[2], m[1], m[4], m[5], m[6]);
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) {
+      var a = +m[1], b = +m[2];
+      return _mkDate(m[3], a > 12 ? b : a, a > 12 ? a : b, m[4], m[5], m[6]);
+    }
+    var p = Date.parse(s);
+    return isFinite(p) ? { ok: true, ms: p } : { ok: false, ms: null };
+  };
+
+  var formatDate = function (ms, out) {
+    if (ms == null) return '';
+    var d = new Date(ms);
+    var map = {
+      YYYY: d.getUTCFullYear(), MM: _pad2(d.getUTCMonth() + 1), DD: _pad2(d.getUTCDate()),
+      HH: _pad2(d.getUTCHours()), mm: _pad2(d.getUTCMinutes()), ss: _pad2(d.getUTCSeconds())
+    };
+    return String(out || 'YYYY-MM-DD').replace(_DATE_TOKENS, function (t) { return map[t]; });
+  };
+
+  var parseBool = function (raw, trueTokens) {
+    if (raw == null) return { ok: false, value: null };
+    var s = String(raw).trim().toLowerCase();
+    if (s === '') return { ok: false, value: null };
+    var T = String(trueTokens || 'да,true,1,yes,y,+,истина').toLowerCase().split(/[,\s]+/).filter(Boolean);
+    var F = ['нет', 'false', '0', 'no', 'n', '-', 'ложь'];
+    if (T.indexOf(s) !== -1) return { ok: true, value: true };
+    if (F.indexOf(s) !== -1) return { ok: true, value: false };
+    return { ok: false, value: null };
+  };
+
+  var _numStr = function (n) {
+    if (!isFinite(n)) return String(n);
+    return (Math.abs(n) >= 1e15 || (n !== 0 && Math.abs(n) < 1e-6))
+      ? String(n) : String(Number(n.toPrecision(15)));
+  };
+
+  // строка-значение -> {display, key, ok}; промах парсинга -> ok:false, key:null, сырой текст
+  var typeCell = function (raw, entity) {
+    var t = (entity && entity.type) || 'text';
+    if (raw == null) return { display: null, key: null, ok: true };
+    var p = (entity && entity.parse) || {};
+    if (t === 'number') {
+      var rn = parseNum(raw, p);
+      return rn.ok ? { display: _numStr(rn.value), key: rn.value, ok: true }
+                   : { display: String(raw), key: null, ok: false };
+    }
+    if (t === 'date') {
+      var rd = parseDate(raw, p.date_in);
+      return rd.ok ? { display: formatDate(rd.ms, p.date_out || 'YYYY-MM-DD'), key: rd.ms, ok: true }
+                   : { display: String(raw), key: null, ok: false };
+    }
+    if (t === 'bool') {
+      var rb = parseBool(raw, p['true']);
+      return rb.ok ? { display: rb.value ? 'да' : 'нет', key: rb.value ? 1 : 0, ok: true }
+                   : { display: String(raw), key: null, ok: false };
+    }
+    return { display: String(raw), key: String(raw).toLowerCase(), ok: true };
+  };
+
+  var _present = function (v, nullWins) {
+    if (v === undefined || v === '') return false;
+    if (v === null) return !!nullWins;
+    return true;
+  };
+
+  // одна ячейка сущности из строки join'а -> строка | null | undefined
+  var resolveCell = function (from, jrow) {
+    from = from || {};
+    if (from.kind === 'resolve') {
+      var ins = (from.inputs || [])
+        .map(function (x, i) { return { c: x.column, w: Number(x.weight) || 0, i: i }; })
+        .filter(function (x) { return x.c; });
+      ins.sort(function (a, b) { return b.w - a.w || a.i - b.i; });   // вес desc, затем порядок
+      for (var k = 0; k < ins.length; k++) {
+        if (_present(jrow[ins[k].c], from.null_wins)) return jrow[ins[k].c];
+      }
+      return undefined;
+    }
+    if (from.kind === 'derived') {
+      var cols = (from.inputs || []).map(function (x) { return x.column; }).filter(Boolean);
+      var vals = cols.map(function (c) { return jrow[c]; })
+        .filter(function (v) { return v !== undefined && v !== null && v !== ''; });
+      var op = from.op || 'first_nonempty';
+      if (!vals.length) return op === 'count_nonempty' ? '0' : undefined;
+      if (op === 'first_nonempty') return vals[0];
+      if (op === 'count_nonempty') return String(vals.length);
+      if (op === 'concat') return vals.join(from.sep == null ? ' ' : String(from.sep));
+      var nums = vals.map(function (v) { return parseNum(v, null); });
+      if (op === 'sum' || op === 'avg') {
+        var got = nums.filter(function (r) { return r.ok; }).map(function (r) { return r.value; });
+        if (!got.length) return undefined;
+        var acc = got.reduce(function (a, b) { return a + b; }, 0);
+        return _numStr(op === 'avg' ? acc / got.length : acc);
+      }
+      if (op === 'min' || op === 'max') {
+        if (nums.every(function (r) { return r.ok; })) {
+          var xs = nums.map(function (r) { return r.value; });
+          return _numStr(op === 'min' ? Math.min.apply(null, xs) : Math.max.apply(null, xs));
+        }
+        var srt = vals.slice().sort(function (a, b) {
+          return String(a).toLowerCase().localeCompare(String(b).toLowerCase());
+        });
+        return op === 'min' ? srt[0] : srt[srt.length - 1];
+      }
+      return vals[0];
+    }
+    return jrow[from.column];   // kind === 'field'
+  };
+
+  var implicitEntities = function (columns) {
+    return columns.map(function (c) {
+      return { name: c, type: 'text', from: { kind: 'field', column: c } };
+    });
+  };
+
+  var _uniqName = function (want, taken, idx) {
+    var base = (want == null || String(want).trim() === '') ? 'столбец ' + (idx + 1) : String(want);
+    var n = base, k = 2;
+    while (taken[n] !== undefined) { n = base + ' (' + k + ')'; k++; }
+    taken[n] = true;
+    return n;
+  };
+
+  // joined {columns, rows} + [entity] -> {columns: имена сущностей, rows}
+  var resolveEntities = function (joined, entities) {
+    var taken = {};
+    var names = entities.map(function (e, i) { return _uniqName(e.name, taken, i); });
+    var rows = joined.rows.map(function (jr) {
+      var out = {};
+      entities.forEach(function (e, i) { out[names[i]] = resolveCell(e.from, jr); });
+      return out;
+    });
+    return { columns: names, rows: rows };
+  };
+
+  // типизация: row[name] -> display; row.__k[name] -> ключ сортировки; row.__u[name] -> промах
+  var parseTypes = function (ds, entities, names) {
+    var rows = ds.rows.map(function (r) {
+      var out = { __k: {}, __u: {} };
+      entities.forEach(function (e, i) {
+        var nm = names[i];
+        var tc = typeCell(r[nm], e);
+        out[nm] = tc.display;
+        out.__k[nm] = tc.key;
+        if (!tc.ok) out.__u[nm] = true;
+      });
+      return out;
+    });
+    return { columns: ds.columns, rows: rows };
+  };
+
+  // список столбцов из пресета (без манифеста — для дефолтов в редьюсере)
+  var presetColumns = function (preset) {
+    var names = Object.keys(preset.query.sources);
+    var multi = names.length > 1;
+    var out = [];
+    names.forEach(function (n) {
+      (preset.query.sources[n].labels || []).forEach(function (l) {
+        out.push(multi ? n + '.' + l : l);
+      });
+    });
+    return out;
+  };
+
+  var _entityColumns = function (preset) {
+    var used = {};
+    preset.view.entities.forEach(function (e) {
+      if (e.from && e.from.kind === 'field' && e.from.column) used[e.from.column] = 1;
+    });
+    return { all: presetColumns(preset), used: used };
+  };
+
+  var mergeEntity = function (cur, patch) {
+    var out = Object.assign({}, cur, patch);
+    if (patch.from) out.from = Object.assign({}, cur.from || {}, patch.from);
+    if (patch.parse) out.parse = Object.assign({}, cur.parse || {}, patch.parse);
+    if (patch.format) out.format = Object.assign({}, cur.format || {}, patch.format);
+    return out;
   };
 
   // --- строка условия: общие контролы для «Конструктора» и расширенного фильтра ---
@@ -503,7 +765,7 @@
 
   var basePreset = function () {
     return JSON.parse(JSON.stringify((window.DS_PRESETS && window.DS_PRESETS[0]) || {
-      name: 'base', query: { as_of: null, sources: {} }, view: { joins: [], conditions: [] }
+      name: 'base', query: { as_of: null, sources: {} }, view: { joins: [], conditions: [], entities: [] }
     }));
   };
 
@@ -531,9 +793,61 @@
             right: j.right || '', right_field: j.right_field || ''
           };
         }) : [],
-        conditions: normalizeConditions(view)
+        conditions: normalizeConditions(view),
+        entities: normalizeEntities(view)
       }
     };
+  };
+
+  // view.entities [{name, type, parse, format, from}] -> чистая форма
+  var normalizeEntities = function (view) {
+    var raw = Array.isArray(view.entities) ? view.entities : [];
+    return raw.map(function (e) {
+      e = e && typeof e === 'object' ? e : {};
+      var f = e.from && typeof e.from === 'object' ? e.from : {};
+      var kind = _ENT_KIND[f.kind] ? f.kind : 'field';
+      var inputs = (Array.isArray(f.inputs) ? f.inputs : []).map(function (x) {
+        x = x && typeof x === 'object' ? x : {};
+        return {
+          column: typeof x.column === 'string' ? x.column : '',
+          weight: x.weight == null || x.weight === '' ? 0.5 : Number(x.weight)
+        };
+      }).filter(function (x) { return x.column; });
+      var from = { kind: kind };
+      if (kind === 'field') {
+        from.column = typeof f.column === 'string' ? f.column : '';
+      } else if (kind === 'resolve') {
+        from.inputs = inputs;
+        from.null_wins = f.null_wins !== false;
+      } else {
+        from.inputs = inputs;
+        from.op = _DERIVED_OP[f.op] ? f.op : 'first_nonempty';
+        if (from.op === 'concat') from.sep = f.sep == null ? ' ' : String(f.sep);
+      }
+      var out = {
+        name: typeof e.name === 'string' ? e.name : '',
+        type: _ENT_TYPE[e.type] ? e.type : 'text',
+        from: from
+      };
+      var p = e.parse && typeof e.parse === 'object' ? e.parse : null;
+      if (p) {
+        out.parse = {};
+        if (p.date_in != null) out.parse.date_in = String(p.date_in);
+        if (p.date_out != null) out.parse.date_out = String(p.date_out);
+        if (p['true'] != null) out.parse['true'] = String(p['true']);
+        if (p.decimal != null) out.parse.decimal = String(p.decimal);
+      }
+      var fm = e.format && typeof e.format === 'object' ? e.format : null;
+      if (fm) {
+        out.format = {};
+        if (fm.width != null && fm.width !== '') out.format.width = Number(fm.width);
+        if (['left', 'center', 'right'].indexOf(fm.align) !== -1) out.format.align = fm.align;
+        if (fm.font_size != null && fm.font_size !== '') out.format.font_size = Number(fm.font_size);
+      }
+      return out;
+    }).filter(function (e) {
+      return e.from.kind === 'field' ? e.from.column !== '' : e.from.inputs.length > 0;
+    });
   };
 
   // view.conditions [{field, op, value}] + миграция старого view.column_filters
@@ -655,6 +969,62 @@
         return setIn(state, ['preset', 'view', 'conditions'],
           state.preset.view.conditions.filter(function (_, i) { return i !== a.index; }));
 
+      case 'preset/addEntity': {
+        var ec = _entityColumns(state.preset);
+        var free = ec.all.filter(function (c) { return !ec.used[c]; })[0] || '';
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat([
+          { name: free, type: 'text', from: { kind: 'field', column: free } }
+        ]));
+      }
+
+      case 'preset/addAllFieldsAsEntities': {
+        var ec2 = _entityColumns(state.preset);
+        var add = ec2.all.filter(function (c) { return !ec2.used[c]; }).map(function (c) {
+          return { name: c, type: 'text', from: { kind: 'field', column: c } };
+        });
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat(add));
+      }
+
+      case 'preset/updateEntity':
+        return setIn(state, ['preset', 'view', 'entities'],
+          state.preset.view.entities.map(function (e, i) { return i === a.index ? mergeEntity(e, a.patch) : e; }));
+
+      case 'preset/removeEntity':
+        return setIn(state, ['preset', 'view', 'entities'],
+          state.preset.view.entities.filter(function (_, i) { return i !== a.index; }));
+
+      case 'preset/moveEntity':
+        return setIn(state, ['preset', 'view', 'entities'],
+          _swap(state.preset.view.entities, a.index, a.index + a.dir));
+
+      case 'preset/addEntityInput':
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
+          return i === a.index ? mergeEntity(e, { from: { inputs: (e.from.inputs || []).concat([{ column: '', weight: 0.5 }]) } }) : e;
+        }));
+
+      case 'preset/updateEntityInput':
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
+          if (i !== a.index) return e;
+          var ins = (e.from.inputs || []).map(function (inp, ii) {
+            return ii === a.ii ? Object.assign({}, inp, a.patch) : inp;
+          });
+          return mergeEntity(e, { from: { inputs: ins } });
+        }));
+
+      case 'preset/removeEntityInput':
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
+          return i === a.index
+            ? mergeEntity(e, { from: { inputs: (e.from.inputs || []).filter(function (_, ii) { return ii !== a.ii; }) } })
+            : e;
+        }));
+
+      case 'preset/moveEntityInput':
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
+          return i === a.index
+            ? mergeEntity(e, { from: { inputs: _swap(e.from.inputs || [], a.ii, a.ii + a.dir) } })
+            : e;
+        }));
+
       case 'build/start':
         return Object.assign({}, state, { building: true, buildError: null });
 
@@ -774,7 +1144,14 @@
         store.dispatch({ type: 'build/error', message: 'Не выбрано ни одного поля для отображения' });
         return;
       }
-      var dataset = applyConditions(joined, state.preset.view.conditions || []);
+      var ents = state.preset.view.entities.length
+        ? state.preset.view.entities
+        : implicitEntities(joined.columns);
+      var re = resolveEntities(joined, ents);
+      var typed = parseTypes(re, ents, re.columns);
+      var dataset = applyConditions(typed, state.preset.view.conditions || []);
+      // сущности с итоговыми (дедуплицированными) именами — для renderGrid / applySort
+      dataset.entities = ents.map(function (e, i) { return Object.assign({}, e, { name: re.columns[i] }); });
       store.dispatch({ type: 'build/success', dataset: dataset });
       store.dispatch({ type: 'route/set', route: 'table' });
     });
@@ -784,10 +1161,21 @@
   // Представление
   // ---------------------------------------------------------------------------
 
-  var cellNode = function (v) {
-    if (v === null) return el('td', { class: 'del', title: 'удалено (DELETE)' }, '∅');
-    if (v === undefined || v === '') return el('td', { class: 'empty' }, '');
-    return el('td', {}, String(v));
+  var cellNode = function (v, entity, unparsed) {
+    var st = '';
+    var fmt = entity && entity.format;
+    if (fmt) {
+      if (fmt.align) st += 'text-align:' + fmt.align + ';';
+      if (fmt.font_size) st += 'font-size:' + Number(fmt.font_size) + 'px;';
+    }
+    var attrs = st ? { style: st } : {};
+    if (v === null) { attrs.class = 'del'; attrs.title = 'удалено (DELETE)'; return el('td', attrs, '∅'); }
+    if (v === undefined || v === '') { attrs.class = 'empty'; return el('td', attrs, ''); }
+    if (unparsed) {
+      attrs.class = 'unparsed';
+      attrs.title = 'не распознано как «' + ((entity && entity.type) || 'text') + '»';
+    }
+    return el('td', attrs, String(v));
   };
 
   var badge = function (ms) {
@@ -896,16 +1284,150 @@
       return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
     }, []);
 
+    // поля для условий: имена сущностей (итоговые столбцы) + на всякий случай сырые столбцы
+    var entityNames = preset.view.entities.map(function (e, i) {
+      return (e.name == null || String(e.name).trim() === '') ? 'столбец ' + (i + 1) : String(e.name);
+    });
+    var condFields = entityNames.length
+      ? entityNames.concat(pickedColumns.filter(function (c) { return entityNames.indexOf(c) === -1; }))
+      : pickedColumns;
+
     var conditionRow = function (cond, i) {
       var patch = function (p) { d({ type: 'preset/updateCondition', index: i, patch: p }); };
       return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
         el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
-          [el('option', { value: '' }, 'поле…')].concat(pickedColumns.map(function (c) {
+          [el('option', { value: '' }, 'поле…')].concat(condFields.map(function (c) {
             return el('option', { value: c, selected: c === cond.field }, c);
           }))),
         opSelect(cond.op, function (v) { patch({ op: v }); }),
         valueControl(cond.op, cond.value, function (v) { patch({ value: v }); }),
         el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeCondition', index: i }); } }, '✕')
+      );
+    };
+
+    // ---- сущности (столбцы таблицы) ----
+    var colSelect = function (cur, onChange) {
+      return el('select', { onchange: function (e) { onChange(e.target.value); } },
+        [el('option', { value: '' }, 'поле…')].concat(pickedColumns.map(function (c) {
+          return el('option', { value: c, selected: c === cur }, c);
+        })));
+    };
+
+    var entityInputs = function (e, i, withWeight) {
+      return el('div', { class: 'entity-inputs' },
+        (e.from.inputs || []).map(function (inp, ii) {
+          return el('div', { class: 'entity-input' },
+            colSelect(inp.column, function (v) {
+              d({ type: 'preset/updateEntityInput', index: i, ii: ii, patch: { column: v } });
+            }),
+            withWeight ? el('input', {
+              type: 'number', class: 'ent-weight', step: '0.05', min: '0', max: '1',
+              value: inp.weight == null ? '' : String(inp.weight), placeholder: 'вес',
+              onchange: function (ev) {
+                d({ type: 'preset/updateEntityInput', index: i, ii: ii,
+                    patch: { weight: ev.target.value === '' ? 0 : Number(ev.target.value) } });
+              }
+            }) : null,
+            el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntityInput', index: i, ii: ii, dir: -1 }); } }, '↑'),
+            el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntityInput', index: i, ii: ii, dir: 1 }); } }, '↓'),
+            el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeEntityInput', index: i, ii: ii }); } }, '✕')
+          );
+        }),
+        el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntityInput', index: i }); } }, '+ вход')
+      );
+    };
+
+    var entityRow = function (e, i) {
+      var up = function (patch) { d({ type: 'preset/updateEntity', index: i, patch: patch }); };
+      var kind = (e.from && e.from.kind) || 'field';
+      var fmt = e.format || {};
+      var pp = e.parse || {};
+
+      var body;
+      if (kind === 'resolve') {
+        body = el('div', {},
+          entityInputs(e, i, true),
+          el('label', { class: 'chk' },
+            el('input', {
+              type: 'checkbox', checked: e.from.null_wins !== false,
+              onchange: function (ev) { up({ from: { null_wins: ev.target.checked } }); }
+            }),
+            'null (DELETE) из весомого источника побеждает'),
+          el('p', { class: 'muted', style: 'margin:.2rem 0 0' }, 'при равных весах — по порядку сверху вниз')
+        );
+      } else if (kind === 'derived') {
+        body = el('div',{},
+          el('select', { onchange: function (ev) { up({ from: { op: ev.target.value } }); } },
+            DERIVED_OPS.map(function (o) {
+              return el('option', { value: o[0], selected: o[0] === (e.from.op || 'first_nonempty') }, o[1]);
+            })),
+          e.from.op === 'concat' ? el('input', {
+            type: 'text', class: 'ent-sep', value: e.from.sep == null ? ' ' : e.from.sep, placeholder: 'разделитель',
+            onchange: function (ev) { up({ from: { sep: ev.target.value } }); }
+          }) : null,
+          entityInputs(e, i, false)
+        );
+      } else {
+        body = colSelect(e.from.column, function (v) { up({ from: { column: v } }); });
+      }
+
+      var typeExtra = null;
+      if (e.type === 'date') {
+        typeExtra = el('div', { class: 'entity-format' },
+          el('label', { class: 'field small' }, 'формат входа',
+            el('input', { type: 'text', value: pp.date_in || 'auto', placeholder: 'auto | DD.MM.YYYY',
+              onchange: function (ev) { up({ parse: { date_in: ev.target.value } }); } })),
+          el('label', { class: 'field small' }, 'формат вывода',
+            el('input', { type: 'text', value: pp.date_out || 'YYYY-MM-DD',
+              onchange: function (ev) { up({ parse: { date_out: ev.target.value } }); } }))
+        );
+      } else if (e.type === 'bool') {
+        typeExtra = el('div', { class: 'entity-format' },
+          el('label', { class: 'field small' }, 'токены истины (через запятую)',
+            el('input', { type: 'text', value: pp['true'] || 'да,true,1,yes,y,+',
+              onchange: function (ev) { up({ parse: { 'true': ev.target.value } }); } })));
+      } else if (e.type === 'number') {
+        typeExtra = el('div', { class: 'entity-format' },
+          el('label', { class: 'field small' }, 'десятичный разделитель',
+            el('select', { onchange: function (ev) { up({ parse: { decimal: ev.target.value } }); } },
+              [['auto', 'авто'], ['.', 'точка'], [',', 'запятая']].map(function (o) {
+                return el('option', { value: o[0], selected: o[0] === (pp.decimal || 'auto') }, o[1]);
+              }))));
+      }
+
+      return el('div', { class: 'entity' },
+        el('div', { class: 'entity-head' },
+          el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: -1 }); } }, '↑'),
+          el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: 1 }); } }, '↓'),
+          el('input', {
+            type: 'text', class: 'ent-alias', value: e.name || '', placeholder: 'название столбца',
+            onchange: function (ev) { up({ name: ev.target.value }); }
+          }),
+          el('select', { onchange: function (ev) { up({ type: ev.target.value }); } },
+            ENTITY_TYPES.map(function (o) { return el('option', { value: o[0], selected: o[0] === (e.type || 'text') }, o[1]); })),
+          el('select', { onchange: function (ev) { up({ from: { kind: ev.target.value } }); } },
+            ENTITY_KINDS.map(function (o) { return el('option', { value: o[0], selected: o[0] === kind }, o[1]); })),
+          el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeEntity', index: i }); } }, '✕')
+        ),
+        el('div', { class: 'entity-body' }, body),
+        typeExtra,
+        el('div', { class: 'entity-format' },
+          el('label', { class: 'field small' }, 'ширина, px',
+            el('input', {
+              type: 'number', min: '20', step: '10', value: fmt.width == null ? '' : String(fmt.width),
+              onchange: function (ev) { up({ format: { width: ev.target.value === '' ? null : Number(ev.target.value) } }); }
+            })),
+          el('label', { class: 'field small' }, 'выравнивание',
+            el('select', { onchange: function (ev) { up({ format: { align: ev.target.value } }); } },
+              [['', '—'], ['left', 'влево'], ['center', 'по центру'], ['right', 'вправо']].map(function (o) {
+                return el('option', { value: o[0], selected: o[0] === (fmt.align || '') }, o[1]);
+              }))),
+          el('label', { class: 'field small' }, 'кегль, px',
+            el('input', {
+              type: 'number', min: '8', step: '1', value: fmt.font_size == null ? '' : String(fmt.font_size),
+              onchange: function (ev) { up({ format: { font_size: ev.target.value === '' ? null : Number(ev.target.value) } }); }
+            }))
+        )
       );
     };
 
@@ -934,6 +1456,21 @@
         el('h2', {}, 'Связки между источниками (LEFT JOIN)'),
         el('div', { class: 'joins' }, preset.view.joins.map(joinRow)),
         el('button', { class: 'link', onclick: function () { d({ type: 'preset/addJoin' }); } }, '+ связка')
+      ) : null,
+
+      pickedColumns.length ? el('div', {},
+        el('h2', {}, 'Сущности (столбцы таблицы)'),
+        preset.view.entities.length
+          ? el('div', { class: 'entities' }, preset.view.entities.map(entityRow))
+          : el('p', { class: 'muted' }, 'сущностей нет — таблица покажет выбранные поля как есть'),
+        el('div', { class: 'row', style: 'gap:.5rem;margin:.4rem 0 0' },
+          el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntity' }); } }, '+ сущность'),
+          el('button', { class: 'link', onclick: function () { d({ type: 'preset/addAllFieldsAsEntities' }); } },
+            '+ все выбранные поля (1:1)')
+        ),
+        el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
+          'сущность = один столбец: поле как есть, разрешение коллизии по весам, либо производная. '
+          + 'Порядок строк = порядок столбцов. Тип задаёт парсинг (даты/числа), непарсибельное подсвечивается.')
       ) : null,
 
       pickedColumns.length ? el('div', {},
@@ -1085,6 +1622,8 @@
     }
 
     var cols = visibleColumns(state.dataset, state.hideEmpty);
+    var entMap = {};
+    (state.dataset.entities || []).forEach(function (e) { entMap[e.name] = e; });
     // конвейер: built dataset -> расширенный фильтр -> быстрые фильтры -> сортировка
     var afterAdv = applyAdvanced(state.dataset, state.adv);
     var afterQuick = applyFilters(afterAdv, state.tableFilters);
@@ -1163,7 +1702,9 @@
           )
         ));
         if (open) groups[k].forEach(function (r) {
-          bodyRows.push(el('tr', { class: 'member' }, cols.map(function (c) { return cellNode(r[c]); })));
+          bodyRows.push(el('tr', { class: 'member' }, cols.map(function (c) {
+            return cellNode(r[c], entMap[c], r.__u && r.__u[c]);
+          })));
         });
       });
 
@@ -1173,15 +1714,21 @@
       ));
     } else {
       filtered.rows.forEach(function (r) {
-        bodyRows.push(el('tr', {}, cols.map(function (c) { return cellNode(r[c]); })));
+        bodyRows.push(el('tr', {}, cols.map(function (c) {
+          return cellNode(r[c], entMap[c], r.__u && r.__u[c]);
+        })));
       });
     }
 
     node.appendChild(el('div', { class: 'count muted' },
       'строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
       + ' · колонок: ' + cols.length));
+    var colgroup = el('colgroup', {}, cols.map(function (c) {
+      var w = entMap[c] && entMap[c].format && entMap[c].format.width;
+      return el('col', w ? { style: 'width:' + Number(w) + 'px' } : {});
+    }));
     node.appendChild(el('div', { class: 'scroll' },
-      el('table', { class: 'data' }, el('thead', {}, head), el('tbody', {}, bodyRows))
+      el('table', { class: 'data' }, colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
     ));
   };
 
