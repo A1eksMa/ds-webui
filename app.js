@@ -767,6 +767,13 @@
     );
   };
 
+  // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
+  var colFilterDraft = {};   // столбец -> введённый, но ещё не применённый текст
+  var FUNNEL_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">'
+    + '<path fill="currentColor" d="M1.7 2h12.6a.5.5 0 0 1 .4.8L10 9.2v3.5a.5.5 0 0 1-.7.46l-2.5-1.1'
+    + 'A.5.5 0 0 1 6.3 11.6V9.2L1.3 2.8A.5.5 0 0 1 1.7 2Z"/></svg>';
+
   var renderGrid = function (state, d) {
     var node = document.getElementById('grid');
     if (!node) return;
@@ -780,14 +787,55 @@
     var cols = visibleColumns(state.dataset, state.hideEmpty);
     var filtered = applyFilters(state.dataset, state.tableFilters);
 
+    // черновики для исчезнувших столбцов не держим
+    Object.keys(colFilterDraft).forEach(function (k) {
+      if (state.dataset.columns.indexOf(k) === -1) delete colFilterDraft[k];
+    });
+
+    var applyColFilter = function (c, value) {
+      delete colFilterDraft[c];
+      d({ type: 'table/setFilter', column: c, value: value });
+      // грид перерисован синхронно — вернуть фокус в то же поле
+      var g = document.getElementById('grid');
+      if (g) [].some.call(g.querySelectorAll('.col-filter'), function (n) {
+        if (n.dataset.col !== c) return false;
+        n.focus();
+        n.setSelectionRange(n.value.length, n.value.length);
+        return true;
+      });
+    };
+
     var head = el('tr', {}, cols.map(function (c) {
-      return el('th', {},
-        el('div', { class: 'col-name' }, c),
-        el('input', {
-          type: 'text', class: 'col-filter', value: state.tableFilters[c] || '', placeholder: 'фильтр…',
-          oninput: function (e) { d({ type: 'table/setFilter', column: c, value: e.target.value }); }
+      var applied = state.tableFilters[c] || '';
+      var draft = colFilterDraft[c] !== undefined ? colFilterDraft[c] : applied;
+      var field;
+      var input = el('input', {
+        type: 'text', class: 'col-filter', value: draft, placeholder: 'фильтр…',
+        title: 'Текст + Enter (или кнопка справа) — применить; Esc — отменить ввод',
+        dataset: { col: c },
+        oninput: function (e) {
+          colFilterDraft[c] = e.target.value;
+          field.classList.toggle('dirty', e.target.value !== (state.tableFilters[c] || ''));
+        },
+        onkeydown: function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); applyColFilter(c, e.target.value); }
+          else if (e.key === 'Escape') {
+            e.preventDefault();
+            delete colFilterDraft[c];
+            e.target.value = state.tableFilters[c] || '';
+            field.classList.remove('dirty');
+          }
+        }
+      });
+      field = el('div', { class: 'col-filter-field' + (draft !== applied ? ' dirty' : '') },
+        input,
+        el('button', {
+          type: 'button', class: 'col-filter-apply', html: FUNNEL_SVG,
+          title: 'Применить фильтр',
+          onclick: function () { applyColFilter(c, input.value); }
         })
       );
+      return el('th', {}, el('div', { class: 'col-name' }, c), field);
     }));
 
     var bodyRows = [];
