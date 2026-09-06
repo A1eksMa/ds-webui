@@ -48,7 +48,7 @@ h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transfor
 
 /* nav */
 .nav {
-  display: flex; align-items: center; gap: .75rem;
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
   padding: .6rem 0; margin-bottom: .5rem;
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 5;
@@ -128,6 +128,26 @@ input[type=text], select {
   min-width: 18rem; resize: vertical;
 }
 .cond-list-tools { display: flex; align-items: center; gap: .6rem; font-size: .85em; }
+
+/* table: расширенный фильтр (панель над таблицей) */
+.advfilter { margin: .5rem 0; }
+.advfilter:empty { margin: 0; }
+.advfilter-panel {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--head-bg); padding: .6rem .75rem;
+}
+.advfilter-head { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.advfilter-head .spacer { flex: 1; }
+.advfilter-foot { display: flex; align-items: center; gap: 1rem; margin-top: .35rem; }
+.adv-conj { min-width: 4rem; }
+.adv-conj-spacer { display: inline-block; width: 4rem; }
+
+/* table: сортировка по клику на заголовок */
+.nav .gear.on { border-color: var(--accent); color: var(--accent); }
+table.data .col-name { cursor: pointer; user-select: none; }
+table.data .col-name:hover { color: var(--accent); }
+table.data .col-name.sorted { color: var(--accent); }
+table.data .col-name .sort-ind { font-size: .85em; }
 
 /* table */
 .toolbar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: .5rem 0; }

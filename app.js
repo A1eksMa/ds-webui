@@ -289,6 +289,89 @@
     return { columns: dataset.columns, rows: rows };
   };
 
+  // --- расширенный фильтр (транзиентный слой на «Таблице», не в пресете) ---
+  // Строки: { field, op, value, conj }. conj ('and'|'or') — связка с предыдущей активной
+  // строкой; у первой активной игнорируется. И приоритетнее ИЛИ: активные строки бьются на
+  // OR-группы по conj==='or', внутри группы — И, между группами — ИЛИ.
+  var evalRowGroups = function (activeRows, row) {
+    var groups = [[]];
+    activeRows.forEach(function (c, i) {
+      if (i > 0 && c.conj === 'or') groups.push([]);
+      groups[groups.length - 1].push(c);
+    });
+    return groups.some(function (g) {
+      return g.every(function (c) { return matchCondition(row[c.field], c); });
+    });
+  };
+
+  var applyAdvanced = function (dataset, rows) {
+    var active = (rows || []).filter(conditionActive);
+    if (!active.length) return dataset;
+    return {
+      columns: dataset.columns,
+      rows: dataset.rows.filter(function (r) { return evalRowGroups(active, r); })
+    };
+  };
+
+  // --- сортировка по столбцу (транзиентная) ---
+  var compareValues = function (a, b) {
+    var na = Number(a), nb = Number(b);
+    if (a !== '' && b !== '' && isFinite(na) && isFinite(nb)) {
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    }
+    return String(a).toLowerCase().localeCompare(String(b).toLowerCase());
+  };
+
+  var applySort = function (rows, sort) {
+    if (!sort || !sort.col) return rows;
+    var dir = sort.dir === 'desc' ? -1 : 1;
+    return rows.map(function (r, i) { return [r, i]; }).sort(function (x, y) {
+      var av = x[0][sort.col], bv = y[0][sort.col];
+      var ae = av == null || av === '', be = bv == null || bv === '';
+      if (ae || be) return ae && be ? x[1] - y[1] : (ae ? 1 : -1);   // пустые — всегда в конец
+      var c = compareValues(av, bv);
+      return c !== 0 ? c * dir : x[1] - y[1];                        // стабильность
+    }).map(function (p) { return p[0]; });
+  };
+
+  // --- строка условия: общие контролы для «Конструктора» и расширенного фильтра ---
+  var opSelect = function (curOp, onChange) {
+    return el('select', { onchange: function (e) { onChange(e.target.value); } },
+      OPERATORS.map(function (o) {
+        return el('option', { value: o[0], selected: o[0] === curOp }, o[1]);
+      }));
+  };
+
+  var valueControl = function (op, value, onValue) {
+    if (OP_LIST[op]) {
+      return el('div', { class: 'cond-list-wrap' },
+        el('textarea', {
+          class: 'cond-list', rows: 3,
+          placeholder: 'значения: по одному в строке или через запятую',
+          onchange: function (e) { onValue(e.target.value); }
+        }, value || ''),
+        el('div', { class: 'cond-list-tools' },
+          el('button', {
+            class: 'link', type: 'button',
+            onclick: function () {
+              pasteFromClipboard(function (text) {
+                var cur = value || '';
+                onValue(cur.trim() ? cur.replace(/\s+$/, '') + '\n' + text : text);
+              });
+            }
+          }, 'Вставить из буфера'),
+          el('span', { class: 'muted' }, parseList(value).length + ' знач.')
+        )
+      );
+    }
+    return el('input', {
+      type: 'text', class: 'cond-value', value: value || '',
+      placeholder: OP_NO_VALUE[op] ? '—' : 'значение',
+      disabled: !!OP_NO_VALUE[op],
+      onchange: function (e) { onValue(e.target.value); }
+    });
+  };
+
   var visibleColumns = function (dataset, hideEmpty) {
     if (!hideEmpty) return dataset.columns;
     return dataset.columns.filter(function (c) {
@@ -488,7 +571,10 @@
     tableFilters: {},
     groupBy: '',
     hideEmpty: false,
-    expanded: {}
+    expanded: {},
+    adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
+    advOpen: false,          // панель расширенного фильтра развёрнута
+    sort: null               // { col, dir: 'asc'|'desc' } | null — сортировка столбца
   };
 
   var reducer = function (state, a) {
@@ -578,7 +664,8 @@
       case 'build/success':
         return Object.assign({}, state, {
           building: false, buildError: null, dataset: a.dataset,
-          tableFilters: {}, groupBy: '', hideEmpty: false, expanded: {}
+          tableFilters: {}, groupBy: '', hideEmpty: false, expanded: {},
+          adv: [], sort: null            // транзиентные слои сбрасываются при пересборке
         });
 
       case 'table/setFilter': {
@@ -607,6 +694,35 @@
 
       case 'table/collapseAll':
         return Object.assign({}, state, { expanded: {} });
+
+      case 'table/sort': {
+        var s = state.sort;
+        var next = (!s || s.col !== a.column) ? { col: a.column, dir: 'asc' }
+          : s.dir === 'asc' ? { col: a.column, dir: 'desc' }
+          : null;
+        return Object.assign({}, state, { sort: next });
+      }
+
+      case 'adv/toggle':
+        return Object.assign({}, state, { advOpen: !state.advOpen });
+
+      case 'adv/add':
+        return Object.assign({}, state, {
+          adv: state.adv.concat([{ field: '', op: 'contains', value: '', conj: 'and' }])
+        });
+
+      case 'adv/update':
+        return Object.assign({}, state, {
+          adv: state.adv.map(function (c, i) { return i === a.index ? Object.assign({}, c, a.patch) : c; })
+        });
+
+      case 'adv/remove':
+        return Object.assign({}, state, {
+          adv: state.adv.filter(function (_, i) { return i !== a.index; })
+        });
+
+      case 'adv/reset':
+        return Object.assign({}, state, { adv: [] });
 
       default:
         return state;
@@ -691,12 +807,20 @@
           class: 'gear', disabled: !state.dataset,
           onclick: function () { d({ type: 'route/set', route: 'table' }); }
         }, '← К таблице');
+    var advBtn = state.route === 'table'
+      ? el('button', {
+          class: 'gear' + (state.advOpen ? ' on' : ''),
+          title: 'Расширенный фильтр: временные условия поверх выборки (не сохраняются)',
+          onclick: function () { d({ type: 'adv/toggle' }); }
+        }, 'Расширенный фильтр ' + (state.advOpen ? '▾' : '▸'))
+      : null;
     return el('header', { class: 'nav' },
       el('strong', {}, 'ds-webui'),
       el('span', { class: 'spacer' }),
       state.dataDir
         ? el('span', { class: 'muted src-dir' }, 'данные: ' + state.dataDir + '/')
         : el('span', { class: 'muted src-dir warn' }, 'нет data/ и sample-data/'),
+      advBtn,
       ctl
     );
   };
@@ -774,47 +898,13 @@
 
     var conditionRow = function (cond, i) {
       var patch = function (p) { d({ type: 'preset/updateCondition', index: i, patch: p }); };
-
-      var valueCtl;
-      if (OP_LIST[cond.op]) {
-        valueCtl = el('div', { class: 'cond-list-wrap' },
-          el('textarea', {
-            class: 'cond-list', rows: 3,
-            placeholder: 'значения: по одному в строке или через запятую',
-            onchange: function (e) { patch({ value: e.target.value }); }
-          }, cond.value || ''),
-          el('div', { class: 'cond-list-tools' },
-            el('button', {
-              class: 'link', type: 'button',
-              onclick: function () {
-                pasteFromClipboard(function (text) {
-                  var cur = cond.value || '';
-                  patch({ value: cur.trim() ? cur.replace(/\s+$/, '') + '\n' + text : text });
-                });
-              }
-            }, 'Вставить из буфера'),
-            el('span', { class: 'muted' }, parseList(cond.value).length + ' знач.')
-          )
-        );
-      } else {
-        valueCtl = el('input', {
-          type: 'text', class: 'cond-value', value: cond.value || '',
-          placeholder: OP_NO_VALUE[cond.op] ? '—' : 'значение',
-          disabled: !!OP_NO_VALUE[cond.op],
-          onchange: function (e) { patch({ value: e.target.value }); }
-        });
-      }
-
       return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
         el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
           [el('option', { value: '' }, 'поле…')].concat(pickedColumns.map(function (c) {
             return el('option', { value: c, selected: c === cond.field }, c);
           }))),
-        el('select', { onchange: function (e) { patch({ op: e.target.value }); } },
-          OPERATORS.map(function (o) {
-            return el('option', { value: o[0], selected: o[0] === cond.op }, o[1]);
-          })),
-        valueCtl,
+        opSelect(cond.op, function (v) { patch({ op: v }); }),
+        valueControl(cond.op, cond.value, function (v) { patch({ value: v }); }),
         el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeCondition', index: i }); } }, '✕')
       );
     };
@@ -922,8 +1012,59 @@
             + selectedNames(state.preset).join(' + '))
         : null,
       state.dataset ? toolbar : null,
+      el('div', { class: 'advfilter', id: 'advfilter' }),
       el('div', { class: 'grid-wrap', id: 'grid' })
     );
+  };
+
+  // ---- Расширенный фильтр (панель над таблицей; не сохраняется) ----------
+
+  var renderAdvFilter = function (state, d) {
+    var node = document.getElementById('advfilter');
+    if (!node) return;
+    clear(node);
+    if (!state.advOpen || !state.dataset) return;
+
+    var cols = state.dataset.columns;
+    var advRow = function (row, i) {
+      var patch = function (p) { d({ type: 'adv/update', index: i, patch: p }); };
+      return el('div', { class: 'condition' + (OP_LIST[row.op] ? ' has-list' : '') },
+        i === 0
+          ? el('span', { class: 'adv-conj-spacer' })
+          : el('select', { class: 'adv-conj', onchange: function (e) { patch({ conj: e.target.value }); } },
+              el('option', { value: 'and', selected: row.conj !== 'or' }, 'И'),
+              el('option', { value: 'or', selected: row.conj === 'or' }, 'ИЛИ')),
+        el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
+          [el('option', { value: '' }, 'поле…')].concat(cols.map(function (c) {
+            return el('option', { value: c, selected: c === row.field }, c);
+          }))),
+        opSelect(row.op, function (v) { patch({ op: v }); }),
+        valueControl(row.op, row.value, function (v) { patch({ value: v }); }),
+        el('button', { class: 'link', onclick: function () { d({ type: 'adv/remove', index: i }); } }, '✕')
+      );
+    };
+
+    var shown = applyAdvanced(state.dataset, state.adv).rows.length;
+
+    node.appendChild(el('div', { class: 'advfilter-panel' },
+      el('div', { class: 'advfilter-head' },
+        el('strong', {}, 'Расширенный фильтр'),
+        el('span', { class: 'muted' }, ' — поверх настроек, до быстрых; не входит в пресет'),
+        el('span', { class: 'spacer' }),
+        el('button', {
+          class: 'link', disabled: !state.adv.length,
+          onclick: function () { d({ type: 'adv/reset' }); }
+        }, 'Сбросить всё'),
+        el('button', { class: 'link', onclick: function () { d({ type: 'adv/toggle' }); } }, 'Скрыть')
+      ),
+      state.adv.length
+        ? el('div', { class: 'conditions' }, state.adv.map(advRow))
+        : el('p', { class: 'muted', style: 'margin:.2rem 0' }, 'условий нет — выборка как из «Конструктора»'),
+      el('div', { class: 'advfilter-foot' },
+        el('button', { class: 'link', onclick: function () { d({ type: 'adv/add' }); } }, '+ условие'),
+        el('span', { class: 'muted' }, 'показано ' + shown + ' из ' + state.dataset.rows.length)
+      )
+    ));
   };
 
   // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
@@ -944,7 +1085,10 @@
     }
 
     var cols = visibleColumns(state.dataset, state.hideEmpty);
-    var filtered = applyFilters(state.dataset, state.tableFilters);
+    // конвейер: built dataset -> расширенный фильтр -> быстрые фильтры -> сортировка
+    var afterAdv = applyAdvanced(state.dataset, state.adv);
+    var afterQuick = applyFilters(afterAdv, state.tableFilters);
+    var filtered = { columns: afterQuick.columns, rows: applySort(afterQuick.rows, state.sort) };
 
     // черновики для исчезнувших столбцов не держим
     Object.keys(colFilterDraft).forEach(function (k) {
@@ -994,7 +1138,15 @@
           onclick: function () { applyColFilter(c, input.value); }
         })
       );
-      return el('th', {}, el('div', { class: 'col-name' }, c), field);
+      var sortDir = state.sort && state.sort.col === c ? state.sort.dir : null;
+      return el('th', {},
+        el('div', {
+          class: 'col-name' + (sortDir ? ' sorted' : ''),
+          title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
+          onclick: function () { d({ type: 'table/sort', column: c }); }
+        }, c, sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
+        field
+      );
     }));
 
     var bodyRows = [];
@@ -1054,7 +1206,12 @@
 
   var exportDataset = function (state) {
     var cols = visibleColumns(state.dataset, state.hideEmpty);
-    return { dataset: applyFilters(state.dataset, state.tableFilters), columns: cols };
+    var afterAdv = applyAdvanced(state.dataset, state.adv);
+    var afterQuick = applyFilters(afterAdv, state.tableFilters);
+    return {
+      dataset: { columns: afterQuick.columns, rows: applySort(afterQuick.rows, state.sort) },
+      columns: cols
+    };
   };
 
   var exportXls = function (state) {
@@ -1078,6 +1235,7 @@
   var root = document.getElementById('app');
   var lastRoute = null;
   var lastDatasetSig = null;
+  var lastAdvOpen = null;
 
   var render = function (state) {
     var d = store.dispatch;
@@ -1099,7 +1257,8 @@
     }
 
     var datasetSig = state.dataset ? state.dataset.columns.join('|') + ':' + state.dataset.rows.length : null;
-    var shellChanged = state.route !== lastRoute || datasetSig !== lastDatasetSig;
+    var shellChanged = state.route !== lastRoute || datasetSig !== lastDatasetSig
+      || state.advOpen !== lastAdvOpen;
 
     if (shellChanged || root.children.length < 2) {
       clear(root);
@@ -1107,12 +1266,16 @@
       root.appendChild(state.route === 'build' ? viewBuild(state, d) : viewTableShell(state, d));
       lastRoute = state.route;
       lastDatasetSig = datasetSig;
+      lastAdvOpen = state.advOpen;
     } else if (state.route === 'build') {
       // build-страница: переть целиком (инпуты — на onchange, фокус не теряется)
       root.replaceChild(viewBuild(state, d), root.children[1]);
     }
 
-    if (state.route === 'table') renderGrid(state, d);
+    if (state.route === 'table') {
+      renderAdvFilter(state, d);
+      renderGrid(state, d);
+    }
     if (state.preset) storage.set('preset', state.preset);
     storage.set('author', state.author);
   };
