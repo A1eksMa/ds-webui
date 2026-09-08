@@ -659,63 +659,61 @@
     });
   };
 
-  var xlsTable = function (id, dataset, columns) {
-    var head = '<tr>' + columns.map(function (c) {
-      return '<th>' + xmlEsc(c) + '</th>';
-    }).join('') + '</tr>';
-    var body = dataset.rows.map(function (r) {
-      return '<tr>' + columns.map(function (c) {
-        return '<td>' + xmlEsc(r[c]) + '</td>';
-      }).join('') + '</tr>';
-    }).join('');
-    return '<table id="' + id + '" border="1">' + head + body + '</table>';
+  // Одна строка <Row> SpreadsheetML. Пустая ячейка — <Cell/> (позицию столбца
+  // держит сама, ss:Index не нужен). Тип всегда String: office-пакет не приведёт
+  // "007" / "99.00" к числу при открытии.
+  var xlsRow = function (values) {
+    return '    <Row>' + values.map(function (v) {
+      return (v == null || v === '')
+        ? '<Cell/>'
+        : '<Cell><Data ss:Type="String">' + xmlEsc(v) + '</Data></Cell>';
+    }).join('') + '</Row>';
   };
 
-  // Одна запись <x:ExcelWorksheet> в MSO-острове. opts: {selected, hidden, protect}
-  var xlsSheetMeta = function (name, opts) {
-    var o = [];
-    if (opts.selected) { o.push('    <x:Selected/>'); }
-    if (opts.hidden) { o.push('    <x:Visible>SheetHidden</x:Visible>'); }
+  // Один настоящий лист SpreadsheetML: имя вкладки = name, шапка + строки данных.
+  // opts: {selected, hidden, protect}
+  var xlsWorksheet = function (name, dataset, columns, opts) {
+    var rows = [xlsRow(columns)].concat(dataset.rows.map(function (r) {
+      return xlsRow(columns.map(function (c) { return r[c]; }));
+    }));
+    var wo = [];
+    if (opts.selected) { wo.push('     <Selected/>'); }
+    if (opts.hidden) { wo.push('     <Visible>SheetHidden</Visible>'); }
     if (opts.protect) {
       // Пустой пароль: защита включена, снимается без пароля.
-      o.push('    <x:ProtectContents>True</x:ProtectContents>');
-      o.push('    <x:ProtectObjects>True</x:ProtectObjects>');
-      o.push('    <x:ProtectScenarios>True</x:ProtectScenarios>');
+      wo.push('     <ProtectContents>True</ProtectContents>');
+      wo.push('     <ProtectObjects>True</ProtectObjects>');
+      wo.push('     <ProtectScenarios>True</ProtectScenarios>');
     }
     return [
-      '   <x:ExcelWorksheet>',
-      '    <x:Name>' + xmlEsc(name) + '</x:Name>',
-      '    <x:WorksheetOptions>',
-      o.join('\n'),
-      '    </x:WorksheetOptions>',
-      '   </x:ExcelWorksheet>'
+      '  <Worksheet ss:Name="' + xmlEsc(name) + '"' + (opts.protect ? ' ss:Protected="1"' : '') + '>',
+      '   <Table>',
+      rows.join('\n'),
+      '   </Table>',
+      '   <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">',
+      wo.join('\n'),
+      '   </WorksheetOptions>',
+      '  </Worksheet>'
     ].join('\n');
   };
 
-  // Книга Excel из двух листов ("user" видимый, "system" — скрытый и защищённый).
-  // Формат — legacy Excel-HTML с MSO-островом: имена листов / скрытие / защиту
-  // читает настольный Microsoft Excel. LibreOffice / Google Sheets остров
-  // игнорируют — там будут два обычных листа с теми же данными.
+  // Книга SpreadsheetML 2003 (Excel XML, расширение .xls) — два настоящих листа
+  // с одинаковыми данными: "user" (видимый, активный) и "system" (скрытый и
+  // защищённый от изменений, пустой пароль). Именованные вкладки открывают и
+  // настольный Microsoft Excel, и LibreOffice / AlterOffice; скрытие и защиту
+  // листа последние могут не применять — тогда это два обычных листа
+  // "user" / "system". Без библиотек.
   var toXlsWorkbook = function (dataset, columns) {
     return [
-      '<html xmlns:o="urn:schemas-microsoft-com:office:office"',
-      '      xmlns:x="urn:schemas-microsoft-com:office:excel"',
-      '      xmlns="http://www.w3.org/TR/REC-html40">',
-      '<head><meta charset="utf-8">',
-      '<!--[if gte mso 9]><xml>',
-      ' <x:ExcelWorkbook>',
-      '  <x:ExcelWorksheets>',
-      xlsSheetMeta('user', { selected: true }),
-      xlsSheetMeta('system', { hidden: true, protect: true }),
-      '  </x:ExcelWorksheets>',
-      '  <x:ActiveSheet>0</x:ActiveSheet>',
-      ' </x:ExcelWorkbook>',
-      '</xml><![endif]-->',
-      '</head>',
-      '<body>',
-      xlsTable('user', dataset, columns),
-      xlsTable('system', dataset, columns),
-      '</body></html>'
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<?mso-application progid="Excel.Sheet"?>',
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+      '          xmlns:o="urn:schemas-microsoft-com:office:office"',
+      '          xmlns:x="urn:schemas-microsoft-com:office:excel"',
+      '          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
+      xlsWorksheet('user', dataset, columns, { selected: true }),
+      xlsWorksheet('system', dataset, columns, { hidden: true, protect: true }),
+      '</Workbook>'
     ].join('\n');
   };
 

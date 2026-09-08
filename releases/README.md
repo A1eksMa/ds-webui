@@ -28,6 +28,28 @@ tar -xzf ds-webui-<version>.tar.gz -C /path/to/target/folder
 
 ---
 
+## 0.7.0a1 — `ds-webui-0.7.0a1.tar.gz`
+
+Выгрузка в Excel — настоящие две вкладки (как и было описано в `README`).
+
+- Кнопка «Выгрузить в Excel» теперь пишет **SpreadsheetML 2003** (Excel XML,
+  расширение `.xls`) вместо legacy Excel-HTML с MSO-островом. Прежняя разметка
+  двух листов не давала: один файл с двумя `<table>` и островом без
+  `WorksheetSource` открывался одним листом (данные задваивались), имена/скрытие/
+  защита игнорировались.
+- Два настоящих `<Worksheet>`: `user` (`<Selected/>`, видимый) и `system`
+  (`ss:Protected="1"`, `<Visible>SheetHidden</Visible>`, `ProtectContents/Objects/
+  Scenarios`, пустой пароль). Именованные вкладки открывают и Microsoft Excel, и
+  LibreOffice / AlterOffice; скрытие и защиту листа последние могут не применять —
+  тогда это два обычных листа `user` / `system`.
+- Ячейки — `ss:Type="String"`: office-пакет не приводит `007` / `99.00` к числу
+  при открытии (снимает риск для ключевого столбца в `scripts/export_diff.py`).
+  Пустая ячейка — `<Cell/>` (позиция столбца сохраняется).
+- `app.js`: `xlsTable` / `xlsSheetMeta` → `xlsRow` / `xlsWorksheet` / `toXlsWorkbook`.
+  MIME и имя файла (`<author>_<ts>.xls`) не изменились. CSV не затронут.
+- `README`, `scripts/README.md`, `scripts/export_diff.py`, `scripts/common.py` —
+  описание формата приведено в соответствие.
+
 ## 0.6.0a1 — `ds-webui-0.6.0a1.tar.gz`
 
 Слой формирования сущностей в «Конструкторе» — браузерный Level 2.

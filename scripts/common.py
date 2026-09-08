@@ -109,8 +109,8 @@ def sheet_columns(sheet):
 
 
 def get_sheet(sheets, name: str, index: int):
-    """Лист по имени; если имени нет — по индексу (имена вкладок из MSO-HTML
-    экспорта ds-webui не сохраняются в LibreOffice/AlterOffice)."""
+    """Лист по имени; если имени нет — по индексу (фолбэк для старых сборок
+    ds-webui / нестандартной конвертации; SpreadsheetML-экспорт имена сохраняет)."""
     if name and sheets.hasByName(name):
         return sheets.getByName(name)
     return sheets.getByIndex(index)
