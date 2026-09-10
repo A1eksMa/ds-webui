@@ -343,6 +343,20 @@
   // Сущности: формирование столбцов таблицы из выбранных полей (браузерный Level 2)
   // =========================================================================
 
+  // ручная ширина столбцов «Таблицы» (px); та же шкала уходит в выгрузку Excel
+  var DEFAULT_COL_W = 150;   // px, если для столбца ничего не задано
+  var MIN_COL_W = 48;        // px, ниже не ужимаем перетаскиванием
+
+  // выбранная/дефолтная ширина столбца c в px: пользовательская → формат сущности → дефолт
+  var colWidthPx = function (state) {
+    var cw = (state.preset && state.preset.view && state.preset.view.column_widths) || {};
+    var em = {};
+    ((state.dataset && state.dataset.entities) || []).forEach(function (e) { em[e.name] = e; });
+    return function (c) {
+      return cw[c] || (em[c] && em[c].format && em[c].format.width) || DEFAULT_COL_W;
+    };
+  };
+
   var ENTITY_TYPES = [['text', 'текст'], ['number', 'число'], ['date', 'дата'], ['bool', 'логич.']];
   var ENTITY_KINDS = [['field', 'поле'], ['resolve', 'коллизия'], ['derived', 'производная']];
   var DERIVED_OPS = [
@@ -661,20 +675,26 @@
 
   // Одна строка <Row> SpreadsheetML. Пустая ячейка — <Cell/> (позицию столбца
   // держит сама, ss:Index не нужен). Тип всегда String: office-пакет не приведёт
-  // "007" / "99.00" к числу при открытии.
-  var xlsRow = function (values) {
+  // "007" / "99.00" к числу при открытии. styleId — общий стиль ячеек строки
+  // (перенос по словам, выравнивание по верху; для шапки ещё и жирный).
+  var xlsRow = function (values, styleId) {
+    var sid = styleId ? ' ss:StyleID="' + styleId + '"' : '';
     return '    <Row>' + values.map(function (v) {
       return (v == null || v === '')
-        ? '<Cell/>'
-        : '<Cell><Data ss:Type="String">' + xmlEsc(v) + '</Data></Cell>';
+        ? '<Cell' + sid + '/>'
+        : '<Cell' + sid + '><Data ss:Type="String">' + xmlEsc(v) + '</Data></Cell>';
     }).join('') + '</Row>';
   };
 
   // Один настоящий лист SpreadsheetML: имя вкладки = name, шапка + строки данных.
-  // opts: {selected, hidden, protect}
-  var xlsWorksheet = function (name, dataset, columns, opts) {
-    var rows = [xlsRow(columns)].concat(dataset.rows.map(function (r) {
-      return xlsRow(columns.map(function (c) { return r[c]; }));
+  // opts: {selected, hidden, protect}. widthsPt — ширины столбцов в пунктах
+  // (пропорции — как на странице «Таблица»); AutoFitWidth=0 → Excel их не пересчитает.
+  var xlsWorksheet = function (name, dataset, columns, opts, widthsPt) {
+    var cols = (widthsPt || []).map(function (w) {
+      return '    <Column ss:AutoFitWidth="0" ss:Width="' + Number(w) + '"/>';
+    });
+    var rows = [xlsRow(columns, 'hdr')].concat(dataset.rows.map(function (r) {
+      return xlsRow(columns.map(function (c) { return r[c]; }), 'cell');
     }));
     var wo = [];
     if (opts.selected) { wo.push('     <Selected/>'); }
@@ -685,16 +705,17 @@
       wo.push('     <ProtectObjects>True</ProtectObjects>');
       wo.push('     <ProtectScenarios>True</ProtectScenarios>');
     }
+    var table = ['   <Table>']
+      .concat(cols.length ? cols : [])
+      .concat([rows.join('\n'), '   </Table>']);
     return [
-      '  <Worksheet ss:Name="' + xmlEsc(name) + '"' + (opts.protect ? ' ss:Protected="1"' : '') + '>',
-      '   <Table>',
-      rows.join('\n'),
-      '   </Table>',
+      '  <Worksheet ss:Name="' + xmlEsc(name) + '"' + (opts.protect ? ' ss:Protected="1"' : '') + '>'
+    ].concat(table).concat([
       '   <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">',
       wo.join('\n'),
       '   </WorksheetOptions>',
       '  </Worksheet>'
-    ].join('\n');
+    ]).join('\n');
   };
 
   // Книга SpreadsheetML 2003 (Excel XML, расширение .xls) — два настоящих листа
@@ -703,7 +724,8 @@
   // настольный Microsoft Excel, и LibreOffice / AlterOffice; скрытие и защиту
   // листа последние могут не применять — тогда это два обычных листа
   // "user" / "system". Без библиотек.
-  var toXlsWorkbook = function (dataset, columns) {
+  // widthsPt — ширины столбцов в пунктах (пропорции — как на «Таблице»).
+  var toXlsWorkbook = function (dataset, columns, widthsPt) {
     return [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<?mso-application progid="Excel.Sheet"?>',
@@ -711,8 +733,12 @@
       '          xmlns:o="urn:schemas-microsoft-com:office:office"',
       '          xmlns:x="urn:schemas-microsoft-com:office:excel"',
       '          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
-      xlsWorksheet('user', dataset, columns, { selected: true }),
-      xlsWorksheet('system', dataset, columns, { hidden: true, protect: true }),
+      ' <Styles>',
+      '  <Style ss:ID="cell"><Alignment ss:Vertical="Top" ss:WrapText="1"/></Style>',
+      '  <Style ss:ID="hdr"><Alignment ss:Vertical="Top" ss:WrapText="1"/><Font ss:Bold="1"/></Style>',
+      ' </Styles>',
+      xlsWorksheet('user', dataset, columns, { selected: true }, widthsPt),
+      xlsWorksheet('system', dataset, columns, { hidden: true, protect: true }, widthsPt),
       '</Workbook>'
     ].join('\n');
   };
@@ -1668,10 +1694,6 @@
     ));
   };
 
-  // --- ручная ширина столбцов «Таблицы» ---
-  var DEFAULT_COL_W = 150;   // px, если для столбца ничего не задано
-  var MIN_COL_W = 48;        // px, ниже не ужимаем перетаскиванием
-
   // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
   var colFilterDraft = {};   // столбец -> введённый, но ещё не применённый текст
   var FUNNEL_SVG =
@@ -1826,12 +1848,9 @@
     node.appendChild(el('div', { class: 'count muted' },
       'строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
       + ' · колонок: ' + cols.length));
-    var colW = state.preset.view.column_widths || {};
+    var gridColW = colWidthPx(state);
     var colgroup = el('colgroup', {}, cols.map(function (c) {
-      var w = colW[c]
-        || (entMap[c] && entMap[c].format && entMap[c].format.width)
-        || DEFAULT_COL_W;
-      return el('col', { style: 'width:' + Number(w) + 'px' });
+      return el('col', { style: 'width:' + Number(gridColW(c)) + 'px' });
     }));
     node.appendChild(el('div', { class: 'scroll' },
       el('table', { class: 'data' }, colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
@@ -1870,8 +1889,13 @@
   var exportXls = function (state) {
     if (!state.dataset) return;
     var e = exportDataset(state);
+    var W = colWidthPx(state);
+    // px → пункты (1px @96dpi = 0.75pt): пропорции сохраняются, значения в разумных рамках
+    var widthsPt = e.columns.map(function (c) {
+      return Math.max(24, Math.min(720, Math.round(W(c) * 0.75)));
+    });
     download(exportFilename(state.author, 'xls'),
-      toXlsWorkbook(e.dataset, e.columns), 'application/vnd.ms-excel');
+      toXlsWorkbook(e.dataset, e.columns, widthsPt), 'application/vnd.ms-excel');
   };
 
   var exportCsv = function (state) {
