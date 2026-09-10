@@ -280,8 +280,14 @@
   };
 
   // Условия применяются последовательно (AND): строка проходит, если удовлетворяет всем.
+  // Условие на несуществующий столбец (устаревший пресет / переименованная сущность)
+  // пропускается — иначе оно молча обнуляло бы всю выборку.
   var applyConditions = function (dataset, conditions) {
-    var active = (conditions || []).filter(conditionActive);
+    var have = {};
+    dataset.columns.forEach(function (c) { have[c] = 1; });
+    var active = (conditions || []).filter(function (c) {
+      return conditionActive(c) && have[c.field];
+    });
     if (!active.length) return dataset;
     var rows = dataset.rows.filter(function (r) {
       return active.every(function (c) { return matchCondition(r[c.field], c); });
@@ -553,10 +559,16 @@
     return n;
   };
 
+  // итоговые (дедуплицированные) имена столбцов для набора сущностей —
+  // ровно то, чем будут ключи строк после resolveEntities/parseTypes
+  var entityOutNames = function (entities) {
+    var taken = {};
+    return (entities || []).map(function (e, i) { return _uniqName(e.name, taken, i); });
+  };
+
   // joined {columns, rows} + [entity] -> {columns: имена сущностей, rows}
   var resolveEntities = function (joined, entities) {
-    var taken = {};
-    var names = entities.map(function (e, i) { return _uniqName(e.name, taken, i); });
+    var names = entityOutNames(entities);
     var rows = joined.rows.map(function (jr) {
       var out = {};
       entities.forEach(function (e, i) { out[names[i]] = resolveCell(e.from, jr); });
@@ -1356,12 +1368,12 @@
       return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
     }, []);
 
-    // поля для условий: имена сущностей (итоговые столбцы) + на всякий случай сырые столбцы
-    var entityNames = preset.view.entities.map(function (e, i) {
-      return (e.name == null || String(e.name).trim() === '') ? 'столбец ' + (i + 1) : String(e.name);
-    });
-    var condFields = entityNames.length
-      ? entityNames.concat(pickedColumns.filter(function (c) { return entityNames.indexOf(c) === -1; }))
+    // поля для условий = ровно те столбцы, что будут в таблице после построения:
+    // при заданных сущностях — их итоговые имена; иначе — выбранные сырые столбцы
+    // (неявные 1:1-сущности). Сырые столбцы при наличии сущностей НЕ предлагаем —
+    // после резолва их в строках нет, условие по ним обнуляло бы выборку.
+    var condFields = preset.view.entities.length
+      ? entityOutNames(preset.view.entities)
       : pickedColumns;
 
     var conditionRow = function (cond, i) {
