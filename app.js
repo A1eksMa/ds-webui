@@ -409,13 +409,26 @@
     return { ok: true, ms: ms };
   };
 
-  // fmt === 'auto' — пробуем распространённые формы; иначе токенный шаблон
+  // Серийная дата Excel/1900 (число дней от 1899-12-30, с исторической ошибкой
+  // «1900 — високосный»). Константа 25569 = дней от этой эпохи до 1970-01-01.
+  // Дробная часть — доля суток. Диапазон 1..2958465 = 1900-01-01 .. 9999-12-31.
+  var _excelSerialToMs = function (n) {
+    if (!isFinite(n) || n < 1 || n > 2958465) return null;
+    return Math.round((n - 25569) * 86400000);
+  };
+
+  // fmt === 'auto' — пробуем распространённые формы (в т.ч. серийную дату Excel
+  // 5–7 цифр); 'excel' / 'serial' — только серийная дата; иначе токенный шаблон
   // (YYYY MM DD HH mm ss с любыми разделителями). Всё в UTC — детерминировано.
   var parseDate = function (raw, fmt) {
     if (raw == null) return { ok: false, ms: null };
     var s = String(raw).trim();
     if (s === '') return { ok: false, ms: null };
     fmt = fmt || 'auto';
+    if (fmt === 'excel' || fmt === 'serial') {
+      var ems = _excelSerialToMs(Number(s.replace(',', '.')));
+      return ems == null ? { ok: false, ms: null } : { ok: true, ms: ems };
+    }
     if (fmt !== 'auto') {
       var toks = [];
       var reStr = fmt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(_DATE_TOKENS, function (t) {
@@ -430,6 +443,12 @@
     if (/^\d{9,13}$/.test(s)) {
       var num = Number(s);
       return isFinite(num) ? { ok: true, ms: s.length <= 10 ? num * 1000 : num } : { ok: false, ms: null };
+    }
+    // серийная дата Excel: 5–7 цифр (≈ 1927…), опц. дробная часть суток.
+    // Короче unix-таймстемпа (9+ цифр) — не пересекается.
+    if (/^\d{5,7}(?:[.,]\d+)?$/.test(s)) {
+      var esm = _excelSerialToMs(Number(s.replace(',', '.')));
+      if (esm != null) return { ok: true, ms: esm };
     }
     var m;
     m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
@@ -1464,13 +1483,19 @@
 
       var typeExtra = null;
       if (e.type === 'date') {
-        typeExtra = el('div', { class: 'entity-format' },
-          el('label', { class: 'field small' }, 'формат входа',
-            el('input', { type: 'text', value: pp.date_in || 'auto', placeholder: 'auto | DD.MM.YYYY',
-              onchange: function (ev) { up({ parse: { date_in: ev.target.value } }); } })),
-          el('label', { class: 'field small' }, 'формат вывода',
-            el('input', { type: 'text', value: pp.date_out || 'YYYY-MM-DD',
-              onchange: function (ev) { up({ parse: { date_out: ev.target.value } }); } }))
+        typeExtra = el('div', {},
+          el('div', { class: 'entity-format' },
+            el('label', { class: 'field small' }, 'формат входа',
+              el('input', { type: 'text', value: pp.date_in || 'auto',
+                placeholder: 'auto | excel | DD.MM.YYYY',
+                onchange: function (ev) { up({ parse: { date_in: ev.target.value } }); } })),
+            el('label', { class: 'field small' }, 'формат вывода',
+              el('input', { type: 'text', value: pp.date_out || 'YYYY-MM-DD',
+                onchange: function (ev) { up({ parse: { date_out: ev.target.value } }); } }))),
+          el('p', { class: 'muted', style: 'margin:.2rem 0 0' },
+            '«auto» понимает ISO, DD.MM.YYYY, unix-время и серийную дату Excel '
+            + '(5–7 цифр); «excel» — только серийную; иначе токены '
+            + 'YYYY MM DD HH mm ss с любыми разделителями')
         );
       } else if (e.type === 'bool') {
         typeExtra = el('div', { class: 'entity-format' },

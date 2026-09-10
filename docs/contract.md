@@ -131,7 +131,9 @@ window.DS.sources["CRM"] = {
     "name": "Цена",              // алиас = заголовок; дефолт — имя поля
     "type": "number",           // "text" | "number" | "date" | "bool"
     "parse": {                   // опц., по type
-      "date_in": "auto",        // "auto" | токенный шаблон (YYYY MM DD HH mm ss)
+      "date_in": "auto",        // "auto" (ISO, DD.MM.YYYY, unix-время, серийная
+                                //   дата Excel 5–7 цифр) | "excel" (только серийная)
+                                //   | токенный шаблон (YYYY MM DD HH mm ss)
       "date_out": "YYYY-MM-DD", // ISO по умолчанию — тогда >/< в фильтрах = хронологические
       "true": "да,true,1",      // bool: токены истины (csv, регистронезависимо)
       "decimal": "auto"         // number: "auto" | "." | ","
