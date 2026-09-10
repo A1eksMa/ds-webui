@@ -901,7 +901,8 @@
     entOpen: true,            // конструктор: развёрнут ли блок «Сущности»
     adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
     advOpen: false,          // панель расширенного фильтра развёрнута
-    sort: null               // { col, dir: 'asc'|'desc' } | null — сортировка столбца
+    sort: null,              // { col, dir: 'asc'|'desc' } | null — сортировка столбца
+    wideTable: false         // «Таблица» во всю ширину окна (localStorage, не в пресете)
   };
 
   var reducer = function (state, a) {
@@ -921,6 +922,9 @@
 
       case 'ui/setAuthor':
         return Object.assign({}, state, { author: String(a.value == null ? '' : a.value) });
+
+      case 'ui/setWideTable':
+        return Object.assign({}, state, { wideTable: !!a.value });
 
       case 'preset/toggleSource': {
         var sources = state.preset.query.sources;
@@ -1583,6 +1587,13 @@
         }),
         'скрыть пустые колонки'
       ),
+      el('label', { class: 'chk', title: 'вынести таблицу за пределы колонки контента — во всю ширину окна браузера' },
+        el('input', {
+          type: 'checkbox', checked: state.wideTable,
+          onchange: function (e) { d({ type: 'ui/setWideTable', value: e.target.checked }); }
+        }),
+        'во всю ширину окна'
+      ),
       el('span', { class: 'spacer' }),
       el('label', { class: 'field small', title: 'подставляется в имя выгружаемого файла как «источник»' },
         'Автор',
@@ -1914,28 +1925,36 @@
       root.replaceChild(viewBuild(state, d), root.children[1]);
     }
 
+    document.body.classList.toggle('grid-wide', !!state.wideTable && state.route === 'table');
+
     if (state.route === 'table') {
       renderAdvFilter(state, d);
       renderGrid(state, d);
     }
     if (state.preset) storage.set('preset', state.preset);
     storage.set('author', state.author);
+    storage.set('wideTable', state.wideTable);
   };
 
   store.subscribe(render);
 
   window.__ds.ready.then(function (boot) {
+    // читаем сохранённое ДО первого полноценного render — иначе он перезапишет
+    // ключи текущим (ещё дефолтным) состоянием
+    var saved = storage.get('preset');
+    var savedAuthor = storage.get('author');
+    var savedWide = storage.get('wideTable') === true;
+
     store.dispatch({
       type: 'manifest/loaded',
       manifest: (boot && boot.manifest) || { sources: [] },
       dataDir: boot ? boot.dataDir : null
     });
-    var saved = storage.get('preset');
     store.dispatch({ type: 'preset/set', preset: saved || basePreset() });
-    var savedAuthor = storage.get('author');
     if (typeof savedAuthor === 'string') {
       store.dispatch({ type: 'ui/setAuthor', value: savedAuthor });
     }
+    store.dispatch({ type: 'ui/setWideTable', value: savedWide });
     // применить пресет по умолчанию и сразу открыть таблицу; при ошибке
     // (нет данных / нет источника) buildDataset оставит пользователя в конструкторе
     buildDataset(store);

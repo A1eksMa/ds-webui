@@ -196,6 +196,12 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .grp-actions { margin: .3rem 0; display: flex; gap: .3rem; }
 .count { margin: .3rem 0; }
 .scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+/* «во всю ширину окна»: грид вырывается из колонки контента (.app max-width),
+   оставляя по 1rem зазора с краями окна; остальная страница не трогается */
+body.grid-wide .scroll {
+  margin-left: calc(50% - 50vw + 1rem);
+  margin-right: calc(50% - 50vw + 1rem);
+}
 table.data {
   border-collapse: collapse; font-size: .9em;
   table-layout: fixed; width: max-content; min-width: 100%;
