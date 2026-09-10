@@ -763,7 +763,8 @@
 
   var basePreset = function () {
     return JSON.parse(JSON.stringify((window.DS_PRESETS && window.DS_PRESETS[0]) || {
-      name: 'base', query: { as_of: null, sources: {} }, view: { joins: [], conditions: [], entities: [] }
+      name: 'base', query: { as_of: null, sources: {} },
+      view: { joins: [], conditions: [], entities: [], column_widths: {} }
     }));
   };
 
@@ -792,9 +793,21 @@
           };
         }) : [],
         conditions: normalizeConditions(view),
-        entities: normalizeEntities(view)
+        entities: normalizeEntities(view),
+        column_widths: normalizeColWidths(view)
       }
     };
+  };
+
+  // view.column_widths { "<столбец>": px } — ручная ширина столбцов «Таблицы»
+  var normalizeColWidths = function (view) {
+    var cw = view && typeof view.column_widths === 'object' && view.column_widths ? view.column_widths : {};
+    var out = {};
+    Object.keys(cw).forEach(function (k) {
+      var n = Number(cw[k]);
+      if (isFinite(n) && n > 0) out[k] = Math.round(n);
+    });
+    return out;
   };
 
   // view.entities [{name, type, parse, format, from}] -> чистая форма
@@ -940,6 +953,14 @@
           ? all.filter(function (l) { return cur.indexOf(l) !== -1 || l === a.label; })
           : cur.filter(function (l) { return l !== a.label; });
         return setIn(state, ['preset', 'query', 'sources', a.source, 'labels'], labels);
+      }
+
+      case 'preset/setColWidth': {
+        var cw = Object.assign({}, state.preset.view.column_widths || {});
+        var wv = Number(a.width);
+        if (a.width == null || !isFinite(wv) || wv <= 0) delete cw[a.column];
+        else cw[a.column] = Math.round(wv);
+        return setIn(state, ['preset', 'view', 'column_widths'], cw);
       }
 
       case 'preset/setAsOf': {
@@ -1184,6 +1205,7 @@
       attrs.class = 'unparsed';
       attrs.title = 'не распознано как «' + ((entity && entity.type) || 'text') + '»';
     }
+    if (!attrs.title) attrs.title = String(v);   // столбцы фикс. ширины — полное значение по ховеру
     return el('td', attrs, String(v));
   };
 
@@ -1635,6 +1657,10 @@
     ));
   };
 
+  // --- ручная ширина столбцов «Таблицы» ---
+  var DEFAULT_COL_W = 150;   // px, если для столбца ничего не задано
+  var MIN_COL_W = 48;        // px, ниже не ужимаем перетаскиванием
+
   // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
   var colFilterDraft = {};   // столбец -> введённый, но ещё не применённый текст
   var FUNNEL_SVG =
@@ -1665,6 +1691,30 @@
       if (state.dataset.columns.indexOf(k) === -1) delete colFilterDraft[k];
     });
 
+    // перетаскивание правой границы заголовка -> ширина столбца (в пресет по mouseup)
+    var startResize = function (ev, idx, c) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var g = document.getElementById('grid');
+      var cg = g && g.querySelector('table.data colgroup');
+      var colEl = cg && cg.children[idx];
+      var th = ev.target.parentNode;
+      if (!colEl || !th) return;
+      var startX = ev.clientX;
+      var w0 = th.getBoundingClientRect().width;
+      var widthAt = function (e) { return Math.max(MIN_COL_W, Math.round(w0 + (e.clientX - startX))); };
+      var onMove = function (e) { colEl.style.width = widthAt(e) + 'px'; };
+      var onUp = function (e) {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.classList.remove('col-resizing');
+        if (Math.abs(e.clientX - startX) >= 3) d({ type: 'preset/setColWidth', column: c, width: widthAt(e) });
+      };
+      document.body.classList.add('col-resizing');
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    };
+
     var applyColFilter = function (c, value) {
       delete colFilterDraft[c];
       d({ type: 'table/setFilter', column: c, value: value });
@@ -1678,7 +1728,7 @@
       });
     };
 
-    var head = el('tr', {}, cols.map(function (c) {
+    var head = el('tr', {}, cols.map(function (c, idx) {
       var applied = state.tableFilters[c] || '';
       var draft = colFilterDraft[c] !== undefined ? colFilterDraft[c] : applied;
       var field;
@@ -1714,8 +1764,19 @@
           class: 'col-name' + (sortDir ? ' sorted' : ''),
           title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
           onclick: function () { d({ type: 'table/sort', column: c }); }
-        }, c, sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
-        field
+        },
+          el('span', { class: 'col-name-txt' }, c),
+          sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
+        field,
+        el('div', {
+          class: 'col-resizer',
+          title: 'Потяните — ширина столбца; двойной клик — сброс',
+          onmousedown: function (ev) { startResize(ev, idx, c); },
+          ondblclick: function (ev) {
+            ev.preventDefault(); ev.stopPropagation();
+            d({ type: 'preset/setColWidth', column: c, width: null });
+          }
+        })
       );
     }));
 
@@ -1754,9 +1815,12 @@
     node.appendChild(el('div', { class: 'count muted' },
       'строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
       + ' · колонок: ' + cols.length));
+    var colW = state.preset.view.column_widths || {};
     var colgroup = el('colgroup', {}, cols.map(function (c) {
-      var w = entMap[c] && entMap[c].format && entMap[c].format.width;
-      return el('col', w ? { style: 'width:' + Number(w) + 'px' } : {});
+      var w = colW[c]
+        || (entMap[c] && entMap[c].format && entMap[c].format.width)
+        || DEFAULT_COL_W;
+      return el('col', { style: 'width:' + Number(w) + 'px' });
     }));
     node.appendChild(el('div', { class: 'scroll' },
       el('table', { class: 'data' }, colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))

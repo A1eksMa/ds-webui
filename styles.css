@@ -173,10 +173,22 @@ input[type=text], select {
 
 /* table: сортировка по клику на заголовок */
 .nav .gear.on { border-color: var(--accent); color: var(--accent); }
-table.data .col-name { cursor: pointer; user-select: none; }
+table.data .col-name {
+  cursor: pointer; user-select: none;
+  display: flex; align-items: baseline; gap: .15rem;
+}
+table.data .col-name .col-name-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 table.data .col-name:hover { color: var(--accent); }
 table.data .col-name.sorted { color: var(--accent); }
-table.data .col-name .sort-ind { font-size: .85em; }
+table.data .col-name .sort-ind { font-size: .85em; flex: none; }
+
+/* table: ручная ширина столбца — тянуть правую границу заголовка */
+table.data th .col-resizer {
+  position: absolute; top: 0; right: 0; width: 8px; height: 100%;
+  cursor: col-resize; z-index: 3; user-select: none; touch-action: none;
+}
+table.data th .col-resizer:hover { background: var(--accent); opacity: .4; }
+body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
 
 /* table */
 .toolbar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: .5rem 0; }
@@ -184,18 +196,23 @@ table.data .col-name .sort-ind { font-size: .85em; }
 .grp-actions { margin: .3rem 0; display: flex; gap: .3rem; }
 .count { margin: .3rem 0; }
 .scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
-table.data { border-collapse: collapse; width: 100%; font-size: .9em; }
+table.data {
+  border-collapse: collapse; font-size: .9em;
+  table-layout: fixed; width: max-content; min-width: 100%;
+}
 table.data th, table.data td {
   border-bottom: 1px solid var(--border); padding: .3rem .5rem; text-align: left;
   white-space: nowrap; vertical-align: top;
 }
+table.data th { position: relative; }
+table.data td { overflow: hidden; text-overflow: ellipsis; }
 table.data thead th {
   position: sticky; top: 0; background: var(--head-bg); z-index: 2;
 }
 table.data .col-name { font-weight: 600; }
 table.data .col-filter-field {
   position: relative; display: flex; align-items: stretch;
-  min-width: 6rem; margin-top: .2rem;
+  min-width: 0; margin-top: .2rem;
 }
 table.data .col-filter { width: 100%; font-size: .9em; padding-right: 1.7rem; }
 table.data .col-filter-apply {
