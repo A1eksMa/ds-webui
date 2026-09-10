@@ -1368,7 +1368,6 @@
     var entityRow = function (e, i) {
       var up = function (patch) { d({ type: 'preset/updateEntity', index: i, patch: patch }); };
       var kind = (e.from && e.from.kind) || 'field';
-      var fmt = e.format || {};
       var pp = e.parse || {};
 
       var body;
@@ -1448,24 +1447,7 @@
           entField('Тип данных', typeSelect),
           entField('Источник расчёта', body, kind !== 'field')
         ),
-        typeExtra,
-        el('div', { class: 'entity-format' },
-          el('label', { class: 'field small' }, 'ширина, px',
-            el('input', {
-              type: 'number', min: '20', step: '10', value: fmt.width == null ? '' : String(fmt.width),
-              onchange: function (ev) { up({ format: { width: ev.target.value === '' ? null : Number(ev.target.value) } }); }
-            })),
-          el('label', { class: 'field small' }, 'выравнивание',
-            el('select', { onchange: function (ev) { up({ format: { align: ev.target.value } }); } },
-              [['', '—'], ['left', 'влево'], ['center', 'по центру'], ['right', 'вправо']].map(function (o) {
-                return el('option', { value: o[0], selected: o[0] === (fmt.align || '') }, o[1]);
-              }))),
-          el('label', { class: 'field small' }, 'кегль, px',
-            el('input', {
-              type: 'number', min: '8', step: '1', value: fmt.font_size == null ? '' : String(fmt.font_size),
-              onchange: function (ev) { up({ format: { font_size: ev.target.value === '' ? null : Number(ev.target.value) } }); }
-            }))
-        )
+        typeExtra
       );
     };
 
