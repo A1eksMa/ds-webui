@@ -884,6 +884,7 @@
     groupBy: '',
     hideEmpty: false,
     expanded: {},
+    srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
     adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
     advOpen: false,          // панель расширенного фильтра развёрнута
     sort: null               // { col, dir: 'asc'|'desc' } | null — сортировка столбца
@@ -919,6 +920,12 @@
           next[a.name] = { labels: ms ? [ms.key].concat(ms.labels) : null };
         }
         return setIn(state, ['preset', 'query', 'sources'], next);
+      }
+
+      case 'ui/toggleSrc': {
+        var so = Object.assign({}, state.srcOpen);
+        so[a.name] = !so[a.name];
+        return Object.assign({}, state, { srcOpen: so });
       }
 
       case 'preset/toggleLabel': {
@@ -1222,6 +1229,7 @@
       var picked = !!preset.query.sources[ms.name];
       var fields = [ms.key].concat(ms.labels);            // ключ — обычное выбираемое поле
       var wanted = picked ? (preset.query.sources[ms.name].labels || fields) : [];
+      var open = picked && !!state.srcOpen[ms.name];      // список показателей развёрнут
       var fieldBox = function (name, isKey) {
         return el('label', { class: 'field-item' + (isKey ? ' key' : '') },
           el('input', {
@@ -1233,16 +1241,26 @@
         );
       };
       return el('div', { class: 'src' + (picked ? ' picked' : '') },
-        el('label', { class: 'src-head' },
-          el('input', {
-            type: 'checkbox', checked: picked,
-            onchange: function () { d({ type: 'preset/toggleSource', name: ms.name }); }
-          }),
-          el('span', { class: 'src-name' }, ms.name),
+        el('div', { class: 'src-head' },
+          el('button', {
+            type: 'button', class: 'src-fold', disabled: !picked,
+            title: !picked ? 'сначала отметьте источник'
+                 : (open ? 'свернуть показатели' : 'развернуть показатели'),
+            onclick: function () { if (picked) d({ type: 'ui/toggleSrc', name: ms.name }); }
+          }, open ? '−' : '+'),
+          el('label', { class: 'src-pick' },
+            el('input', {
+              type: 'checkbox', checked: picked,
+              onchange: function () { d({ type: 'preset/toggleSource', name: ms.name }); }
+            }),
+            el('span', { class: 'src-name' }, ms.name)
+          ),
           el('span', { class: 'muted' }, ms.rows + ' строк · срез ' + fmtDate(ms.as_of)),
+          picked ? el('span', { class: 'muted src-fields-n' },
+            '· показателей: ' + wanted.length + ' из ' + fields.length) : null,
           badge(ms)
         ),
-        picked ? el('div', { class: 'field-list' },
+        open ? el('div', { class: 'field-list' },
           fieldBox(ms.key, true),
           ms.labels.map(function (lb) { return fieldBox(lb, false); })
         ) : null

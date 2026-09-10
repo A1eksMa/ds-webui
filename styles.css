@@ -91,7 +91,15 @@ input[type=text], select {
 .src-list { display: flex; flex-direction: column; gap: .4rem; }
 .src { border: 1px solid var(--border); border-radius: 8px; padding: .5rem .7rem; }
 .src.picked { border-color: var(--accent); }
-.src-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; cursor: pointer; }
+.src-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.src-pick { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; }
+.src-fold {
+  flex: none; width: 1.6rem; height: 1.6rem; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1rem; line-height: 1; border-radius: 5px;
+}
+.src-fold:disabled { opacity: .35; }
+.src-fields-n { font-size: .92em; }
 .src-name { font-weight: 600; }
 .chk { display: inline-flex; align-items: center; gap: .3rem; }
 
