@@ -885,6 +885,7 @@
     hideEmpty: false,
     expanded: {},
     srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
+    entOpen: true,            // конструктор: развёрнут ли блок «Сущности»
     adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
     advOpen: false,          // панель расширенного фильтра развёрнута
     sort: null               // { col, dir: 'asc'|'desc' } | null — сортировка столбца
@@ -927,6 +928,9 @@
         so[a.name] = !so[a.name];
         return Object.assign({}, state, { srcOpen: so });
       }
+
+      case 'ui/toggleEnt':
+        return Object.assign({}, state, { entOpen: !state.entOpen });
 
       case 'preset/toggleLabel': {
         var ms2 = manifestSource(state, a.source);
@@ -1329,6 +1333,14 @@
         })));
     };
 
+    // строка сущности «подпись · контрол»; block — для многострочного контрола
+    var entField = function (lbl, control, block) {
+      return el('div', { class: 'entity-field' + (block ? ' block' : '') },
+        el('span', { class: 'entity-field-lbl' }, lbl),
+        el('div', { class: 'entity-field-ctl' }, control)
+      );
+    };
+
     var entityInputs = function (e, i, withWeight) {
       return el('div', { class: 'entity-inputs' },
         (e.from.inputs || []).map(function (inp, ii) {
@@ -1411,21 +1423,31 @@
               }))));
       }
 
+      var kindSelect = el('select', { onchange: function (ev) { up({ from: { kind: ev.target.value } }); } },
+        ENTITY_KINDS.map(function (o) { return el('option', { value: o[0], selected: o[0] === kind }, o[1]); }));
+      var typeSelect = el('select', { onchange: function (ev) { up({ type: ev.target.value }); } },
+        ENTITY_TYPES.map(function (o) { return el('option', { value: o[0], selected: o[0] === (e.type || 'text') }, o[1]); }));
+
       return el('div', { class: 'entity' },
         el('div', { class: 'entity-head' },
-          el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: -1 }); } }, '↑'),
-          el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: 1 }); } }, '↓'),
-          el('input', {
+          entField('Наименование', el('input', {
             type: 'text', class: 'ent-alias', value: e.name || '', placeholder: 'название столбца',
             onchange: function (ev) { up({ name: ev.target.value }); }
-          }),
-          el('select', { onchange: function (ev) { up({ type: ev.target.value }); } },
-            ENTITY_TYPES.map(function (o) { return el('option', { value: o[0], selected: o[0] === (e.type || 'text') }, o[1]); })),
-          el('select', { onchange: function (ev) { up({ from: { kind: ev.target.value } }); } },
-            ENTITY_KINDS.map(function (o) { return el('option', { value: o[0], selected: o[0] === kind }, o[1]); })),
-          el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeEntity', index: i }); } }, '✕')
+          })),
+          el('div', { class: 'entity-tools' },
+            el('button', { class: 'link', title: 'переместить выше',
+              onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: -1 }); } }, '↑'),
+            el('button', { class: 'link', title: 'переместить ниже',
+              onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: 1 }); } }, '↓'),
+            el('button', { class: 'link', title: 'удалить сущность',
+              onclick: function () { d({ type: 'preset/removeEntity', index: i }); } }, '✕')
+          )
         ),
-        el('div', { class: 'entity-body' }, body),
+        el('div', { class: 'entity-rows' },
+          entField('Способ расчёта', kindSelect),
+          entField('Тип данных', typeSelect),
+          entField('Источник расчёта', body, kind !== 'field')
+        ),
         typeExtra,
         el('div', { class: 'entity-format' },
           el('label', { class: 'field small' }, 'ширина, px',
@@ -1475,18 +1497,29 @@
       ) : null,
 
       pickedColumns.length ? el('div', {},
-        el('h2', {}, 'Сущности (столбцы таблицы)'),
-        preset.view.entities.length
-          ? el('div', { class: 'entities' }, preset.view.entities.map(entityRow))
-          : el('p', { class: 'muted' }, 'сущностей нет — таблица покажет выбранные поля как есть'),
-        el('div', { class: 'row', style: 'gap:.5rem;margin:.4rem 0 0' },
-          el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntity' }); } }, '+ сущность'),
-          el('button', { class: 'link', onclick: function () { d({ type: 'preset/addAllFieldsAsEntities' }); } },
-            '+ все выбранные поля (1:1)')
+        el('div', { class: 'sec-head' },
+          el('button', {
+            type: 'button', class: 'sec-fold',
+            title: state.entOpen ? 'свернуть блок' : 'развернуть блок',
+            onclick: function () { d({ type: 'ui/toggleEnt' }); }
+          }, state.entOpen ? '−' : '+'),
+          el('h2', {}, 'Сущности (столбцы таблицы)'),
+          state.entOpen ? null
+            : el('span', { class: 'muted' }, '· столбцов: ' + preset.view.entities.length)
         ),
-        el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
-          'сущность = один столбец: поле как есть, разрешение коллизии по весам, либо производная. '
-          + 'Порядок строк = порядок столбцов. Тип задаёт парсинг (даты/числа), непарсибельное подсвечивается.')
+        state.entOpen ? el('div', {},
+          preset.view.entities.length
+            ? el('div', { class: 'entities' }, preset.view.entities.map(entityRow))
+            : el('p', { class: 'muted' }, 'сущностей нет — таблица покажет выбранные поля как есть'),
+          el('div', { class: 'row', style: 'gap:.5rem;margin:.4rem 0 0' },
+            el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntity' }); } }, '+ сущность'),
+            el('button', { class: 'link', onclick: function () { d({ type: 'preset/addAllFieldsAsEntities' }); } },
+              '+ все выбранные поля (1:1)')
+          ),
+          el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
+            'сущность = один столбец: поле как есть, разрешение коллизии по весам, либо производная. '
+            + 'Порядок строк = порядок столбцов. Тип задаёт парсинг (даты/числа), непарсибельное подсвечивается.')
+        ) : null
       ) : null,
 
       pickedColumns.length ? el('div', {},

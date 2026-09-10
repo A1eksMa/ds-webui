@@ -93,12 +93,14 @@ input[type=text], select {
 .src.picked { border-color: var(--accent); }
 .src-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .src-pick { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; }
-.src-fold {
+.src-fold, .sec-fold {
   flex: none; width: 1.6rem; height: 1.6rem; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 1rem; line-height: 1; border-radius: 5px;
 }
 .src-fold:disabled { opacity: .35; }
+.sec-head { display: flex; align-items: center; gap: .5rem; margin: 1.5rem 0 .5rem; }
+.sec-head h2 { margin: 0; }
 .src-fields-n { font-size: .92em; }
 .src-name { font-weight: 600; }
 .chk { display: inline-flex; align-items: center; gap: .3rem; }
@@ -126,9 +128,15 @@ input[type=text], select {
 /* build: сущности (столбцы таблицы) */
 .entities { display: flex; flex-direction: column; gap: .5rem; }
 .entity { border: 1px solid var(--border); border-radius: 8px; padding: .5rem .6rem; }
-.entity-head { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
-.entity-head .ent-alias { min-width: 10rem; }
-.entity-body { margin: .4rem 0 .2rem; }
+.entity-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.entity-head .entity-field { flex: 1 1 20rem; max-width: 34rem; margin: 0; }
+.entity-head .ent-alias { width: 100%; min-width: 10rem; }
+.entity-tools { display: flex; align-items: center; gap: .1rem; margin-left: auto; flex: none; }
+.entity-rows { display: flex; flex-direction: column; gap: .1rem; margin: .5rem 0 .2rem; }
+.entity-field { display: flex; align-items: center; gap: .5rem; margin: .15rem 0; }
+.entity-field.block { align-items: flex-start; }
+.entity-field-lbl { flex: none; min-width: 9.5rem; color: var(--muted); font-size: .92em; }
+.entity-field-ctl { flex: 1 1 auto; min-width: 0; }
 .entity-inputs { display: flex; flex-direction: column; gap: .3rem; margin: .2rem 0; }
 .entity-input { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
 .entity-input .ent-weight { width: 4.5rem; }
