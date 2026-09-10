@@ -1766,14 +1766,20 @@
       ev.preventDefault();
       ev.stopPropagation();
       var g = document.getElementById('grid');
-      var cg = g && g.querySelector('table.data colgroup');
+      var tableEl = g && g.querySelector('table.data');
+      var cg = tableEl && tableEl.querySelector('colgroup');
       var colEl = cg && cg.children[idx];
       var th = ev.target.parentNode;
       if (!colEl || !th) return;
       var startX = ev.clientX;
       var w0 = th.getBoundingClientRect().width;
+      var total0 = tableEl.getBoundingClientRect().width;
       var widthAt = function (e) { return Math.max(MIN_COL_W, Math.round(w0 + (e.clientX - startX))); };
-      var onMove = function (e) { colEl.style.width = widthAt(e) + 'px'; };
+      var onMove = function (e) {
+        var w = widthAt(e);
+        colEl.style.width = w + 'px';
+        tableEl.style.width = (total0 - w0 + w) + 'px';   // тянем и таблицу — иначе остальные столбцы сжимаются
+      };
       var onUp = function (e) {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
@@ -1886,11 +1892,16 @@
       'строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
       + ' · колонок: ' + cols.length));
     var gridColW = colWidthPx(state);
-    var colgroup = el('colgroup', {}, cols.map(function (c) {
-      return el('col', { style: 'width:' + Number(gridColW(c)) + 'px' });
+    var widths = cols.map(function (c) { return Number(gridColW(c)); });
+    var colgroup = el('colgroup', {}, widths.map(function (w) {
+      return el('col', { style: 'width:' + w + 'px' });
     }));
+    // Явная ширина = сумма столбцов. Без неё table-layout:fixed при width:max-content
+    // всё равно меряет контент → столбец не ужать уже текста заголовка.
+    var totalW = widths.reduce(function (a, b) { return a + b; }, 0);
     node.appendChild(el('div', { class: 'scroll' },
-      el('table', { class: 'data' }, colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
+      el('table', { class: 'data', style: 'width:' + totalW + 'px' },
+        colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
     ));
   };
 

@@ -204,7 +204,7 @@ body.grid-wide .scroll {
 }
 table.data {
   border-collapse: collapse; font-size: .9em;
-  table-layout: fixed; width: max-content; min-width: 100%;
+  table-layout: fixed; min-width: 100%;   /* ширину (сумму столбцов) ставит renderGrid инлайном */
 }
 table.data th, table.data td {
   border-bottom: 1px solid var(--border); padding: .3rem .5rem; text-align: left;
@@ -219,9 +219,9 @@ table.data thead th {
 table.data .col-name { font-weight: 600; }
 table.data .col-filter-field {
   position: relative; display: flex; align-items: stretch;
-  min-width: 0; margin-top: .2rem;
+  min-width: 0; overflow: hidden; margin-top: .2rem;
 }
-table.data .col-filter { width: 100%; font-size: .9em; padding-right: 1.7rem; }
+table.data .col-filter { width: 100%; min-width: 0; font-size: .9em; padding-right: 1.7rem; }
 table.data .col-filter-apply {
   position: absolute; right: 1px; top: 1px; bottom: 1px; width: 1.55rem;
   display: inline-flex; align-items: center; justify-content: center;
