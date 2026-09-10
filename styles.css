@@ -202,10 +202,11 @@ table.data {
 }
 table.data th, table.data td {
   border-bottom: 1px solid var(--border); padding: .3rem .5rem; text-align: left;
-  white-space: nowrap; vertical-align: top;
+  vertical-align: top;
 }
-table.data th { position: relative; }
-table.data td { overflow: hidden; text-overflow: ellipsis; }
+table.data th { position: relative; white-space: nowrap; }
+/* значение переносится по ширине столбца (фикс. раскладка), не распирает таблицу */
+table.data td { overflow: hidden; overflow-wrap: anywhere; }
 table.data thead th {
   position: sticky; top: 0; background: var(--head-bg); z-index: 2;
 }
