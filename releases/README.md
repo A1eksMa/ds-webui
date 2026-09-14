@@ -13,8 +13,9 @@ mkdir -p /path/to/target/folder
 tar -xzf ds-webui-<version>.tar.gz -C /path/to/target/folder
 ```
 
-Внутри: `index.html`, `app.js`, `styles.css`, `presets.js`, `sample-data/`, `scripts/`,
-`LICENSE`, `README.md`.
+Внутри: `index.html`, модули приложения (`util.js`, `effects.js`, `dataset.js`,
+`entities.js`, `export.js`, `store.js`, `view-common.js`, `view-build.js`, `view-table.js`,
+`main.js`), `styles.css`, `presets.js`, `sample-data/`, `scripts/`, `LICENSE`, `README.md`.
 
 ## Запуск
 

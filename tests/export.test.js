@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const App = require('../app.js');
+const App = require('../export.js');
 
 test('toCsv: экранирует запятую и кавычки', () => {
   const dataset = { rows: [{ a: 'x,y', b: 'z' }] };

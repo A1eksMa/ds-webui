@@ -1,13 +1,13 @@
 'use strict';
 
 // Тесты слоя «сущностей» (browser-level 2): парсинг чисел/дат/bool, типизация,
-// резолюция коллизий. Это самая рискованная логика в app.js — граничные случаи
+// резолюция коллизий. Это самая рискованная логика приложения — граничные случаи
 // (серийная дата Excel, неоднозначные разделители) легче всего сломать правкой
 // «на глаз». Запуск: node --test (или ./run_tests.sh).
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const App = require('../app.js');
+const App = require('../entities.js');
 
 test('parseNum: точка как десятичный разделитель', () => {
   assert.deepEqual(App.parseNum('99.00'), { ok: true, value: 99 });
@@ -81,4 +81,9 @@ test('resolveCell: kind=resolve — при равных весах побежд�
 test('resolveCell: kind=derived — sum по числовым входам', () => {
   const from = { kind: 'derived', op: 'sum', inputs: [{ column: 'a' }, { column: 'b' }] };
   assert.equal(App.resolveCell(from, { a: '2', b: '3' }), '5');
+});
+
+test('normalizeEntities: отбрасывает сущность без источника значения', () => {
+  const view = { entities: [{ name: 'x', from: { kind: 'field', column: '' } }] };
+  assert.deepEqual(App.normalizeEntities(view), []);
 });

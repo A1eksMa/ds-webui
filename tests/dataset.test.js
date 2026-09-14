@@ -5,7 +5,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const App = require('../app.js');
+const App = require('../dataset.js');
 
 test('joinSources: LEFT JOIN двух источников по ключу, колонки квалифицированы', () => {
   const crm = { name: 'CRM', key: 'id', labels: ['id', 'email'], data: [{ id: '1', email: 'a@x' }] };

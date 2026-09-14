@@ -4,7 +4,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const App = require('../app.js');
+const App = require('../store.js');
 
 test('normalizePreset: пустой объект -> валидная дефолтная форма', () => {
   const p = App.normalizePreset({});
@@ -17,11 +17,6 @@ test('normalizePreset: пустой объект -> валидная дефол�
 test('normalizePreset: мигрирует старое view.column_filters в view.conditions', () => {
   const p = App.normalizePreset({ view: { column_filters: { Foo: 'bar' } } });
   assert.deepEqual(p.view.conditions, [{ field: 'Foo', op: 'contains', value: 'bar' }]);
-});
-
-test('normalizeEntities: отбрасывает сущность без источника значения', () => {
-  const view = { entities: [{ name: 'x', from: { kind: 'field', column: '' } }] };
-  assert.deepEqual(App.normalizeEntities(view), []);
 });
 
 test('reducer: route/set меняет текущий маршрут', () => {
