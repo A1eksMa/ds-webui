@@ -3,7 +3,8 @@
 // Store: фабрика createStore (reducer + dispatch + subscribe), селекторы
 // состояния, нормализация пресета, редьюсер, (де)сериализация пресета в файл.
 // Зависит от util.js (omit/setIn/_swap), dataset.js (OP_IDS), entities.js
-// (normalizeEntities/mergeEntity/_entityColumns), effects.js (download/readFile).
+// (normalizeEntities/mergeEntity/_entityColumns/parseDate), effects.js
+// (download/readFile).
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
@@ -18,7 +19,7 @@
   var omit = Util.omit, setIn = Util.setIn, _swap = Util._swap;
   var OP_IDS = Dataset.OP_IDS;
   var normalizeEntities = Entities.normalizeEntities, mergeEntity = Entities.mergeEntity,
-      _entityColumns = Entities._entityColumns;
+      _entityColumns = Entities._entityColumns, parseDate = Entities.parseDate;
   var download = Effects.download, readFile = Effects.readFile;
 
   var isStale = function (ms) { return ms.db_max_cnt > ms.gen_max_cnt; };
@@ -201,10 +202,14 @@
       }
 
       case 'preset/setAsOf': {
-        var raw = String(a.value).trim();
-        var value = raw === '' ? null : Number(raw);
-        if (value != null && isNaN(value)) return state;
-        return setIn(state, ['preset', 'query', 'as_of'], value);
+        // Принимает то же, что parseDate('auto'): дату, дату-время (с секундами
+        // или без), unix-время; миллисекунды в дате/unix — усекаются (as_of у ds
+        // секундной точности). Нераспознанный ввод — не трогаем прежнее значение.
+        var raw = String(a.value == null ? '' : a.value).trim();
+        if (raw === '') return setIn(state, ['preset', 'query', 'as_of'], null);
+        var parsed = parseDate(raw, 'auto');
+        if (!parsed.ok) return state;
+        return setIn(state, ['preset', 'query', 'as_of'], Math.round(parsed.ms / 1000));
       }
 
       case 'preset/addJoin': {

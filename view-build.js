@@ -269,10 +269,10 @@
       el('h1', {}, 'Конструктор выборки'),
 
       el('div', { class: 'row' },
-        el('label', { class: 'field' }, 'Срез (as_of, unix-время; пусто = текущий момент)',
+        el('label', { class: 'field' }, 'Срез (as_of; дата или дата-время, пусто = текущий момент)',
           el('input', {
             type: 'text', value: preset.query.as_of == null ? '' : String(preset.query.as_of),
-            placeholder: 'сейчас',
+            placeholder: 'например: 2024-02-01 14:30',
             onchange: function (e) { d({ type: 'preset/setAsOf', value: e.target.value }); }
           })
         ),

@@ -78,6 +78,9 @@
       var dataset = applyConditions(typed, state.preset.view.conditions || []);
       // сущности с итоговыми (дедуплицированными) именами — для renderGrid / applySort
       dataset.entities = ents.map(function (e, i) { return Object.assign({}, e, { name: re.columns[i] }); });
+      // срез, с которым сделана ИМЕННО эта сборка — не state.preset.query.as_of напрямую:
+      // его можно поменять в «Конструкторе» и вернуться на «Таблицу» без пересборки
+      dataset.as_of = state.preset.query.as_of;
       store.dispatch({ type: 'build/success', dataset: dataset });
       store.dispatch({ type: 'route/set', route: 'table' });
     });
@@ -122,7 +125,7 @@
   var store = createStore(reducer, initialState);
   var root = document.getElementById('app');
   var lastRoute = null;
-  var lastDatasetSig = null;
+  var lastDataset = null;   // ссылка, не сигнатура — build/success всегда создаёт новый объект
   var lastAdvOpen = null;
 
   var render = function (state) {
@@ -140,12 +143,18 @@
       root.appendChild(el('section', { class: 'page' },
         el('p', { class: 'muted' }, 'Открываю таблицу по пресету по умолчанию…')));
       lastRoute = null;
-      lastDatasetSig = null;
+      lastDataset = null;
       return;
     }
 
-    var datasetSig = state.dataset ? state.dataset.columns.join('|') + ':' + state.dataset.rows.length : null;
-    var shellChanged = state.route !== lastRoute || datasetSig !== lastDatasetSig
+    // Пересоздать шапку/тело страницы, только когда действительно нужно: сменился
+    // маршрут, случилась НОВАЯ сборка (build/success — всегда новая ссылка на
+    // dataset, даже если её форма совпала с предыдущей: например, изменился только
+    // as_of или имя пресета, а колонки/число строк те же) или открылась/закрылась
+    // панель расширенного фильтра. Раньше вместо ссылки сравнивалась сигнатура
+    // "columns+rows.length" — она совпадала для двух РАЗНЫХ сборок с одинаковой
+    // формой, и шапка (там же — имя пресета и срез as_of) оставалась от старой сборки.
+    var shellChanged = state.route !== lastRoute || state.dataset !== lastDataset
       || state.advOpen !== lastAdvOpen;
 
     if (shellChanged || root.children.length < 2) {
@@ -153,7 +162,7 @@
       root.appendChild(viewNav(state, d));
       root.appendChild(state.route === 'build' ? viewBuild(state, d) : viewTableShell(state, d));
       lastRoute = state.route;
-      lastDatasetSig = datasetSig;
+      lastDataset = state.dataset;
       lastAdvOpen = state.advOpen;
     } else if (state.route === 'build') {
       // build-страница: переть целиком (инпуты — на onchange, фокус не теряется)

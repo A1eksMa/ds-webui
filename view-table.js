@@ -19,7 +19,7 @@
   }
 })(typeof window !== 'undefined' ? window : this, function (Util, Dataset, Entities, ViewCommon, Store) {
 
-  var el = Util.el, clear = Util.clear, groupBy = Util.groupBy;
+  var el = Util.el, clear = Util.clear, groupBy = Util.groupBy, fmtDate = Util.fmtDate;
   var visibleColumns = Dataset.visibleColumns, applyAdvanced = Dataset.applyAdvanced,
       applyFilters = Dataset.applyFilters, applySort = Dataset.applySort, OP_LIST = Dataset.OP_LIST;
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
@@ -83,7 +83,8 @@
       el('h1', {}, 'Таблица'),
       state.dataset
         ? el('p', { class: 'muted' }, 'Пресет «' + state.preset.name + '», источники: '
-            + selectedNames(state.preset).join(' + '))
+            + selectedNames(state.preset).join(' + ')
+            + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент'))
         : null,
       state.dataset ? toolbar : null,
       el('div', { class: 'advfilter', id: 'advfilter' }),
