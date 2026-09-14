@@ -9,6 +9,7 @@
 | `CRM.js` | `window.DS.sources["CRM"]` — 4 объекта, показатели `email` / `phone` / `status` |
 | `ERP.js` | `window.DS.sources["ERP"]` — 3 объекта, показатели `price` / `stock`, ключ `client_ref` |
 | `manifest.js` | `window.DS_MANIFEST` — индекс + свежесть по каждому источнику |
+| `base.js` | `window.DS_BASE_PRESET` — пресет по умолчанию (JOIN CRM↔ERP из примера ниже) |
 
 ## Что этот набор демонстрирует
 
@@ -16,7 +17,7 @@
 - **DELETE → null** — `CRM/103.phone` и `ERP/102.stock` равны `null` (значение удалено в источнике).
 - **Отсутствие ключа ≠ null** — у `CRM/104` нет ключа `phone` (транзакции не было).
 - **LEFT JOIN с непопаданием** — `ERP/999` (`client_ref`) не имеет пары в CRM; `CRM/103`, `104`
-  не имеют пары в ERP. Джойн `CRM.customer_id ↔ ERP.client_ref` (см. `../presets.js`).
+  не имеют пары в ERP. Джойн `CRM.customer_id ↔ ERP.client_ref` (см. `base.js`).
 - **Устаревание** — в `manifest.js` у `CRM` `db_max_cnt` (21) > `gen_max_cnt` (13): после
   генерации файла в базу пришла ещё одна CRM-транзакция → источник помечается «пересобрать».
   У `ERP` они равны — свежий.

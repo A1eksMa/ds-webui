@@ -42,8 +42,11 @@
     };
   };
 
+  // Данные, не код: window.DS_BASE_PRESET грузится инъекцией <script> из
+  // sample-data/base.js или data/base.js (см. index.html) — не хардкод в
+  // presets.js, как раньше. Нет ни того, ни другого -> пустой пресет.
   var basePreset = function () {
-    return JSON.parse(JSON.stringify((window.DS_PRESETS && window.DS_PRESETS[0]) || {
+    return JSON.parse(JSON.stringify(window.DS_BASE_PRESET || {
       name: 'base', query: { as_of: null, sources: {} },
       view: { joins: [], conditions: [], entities: [], column_widths: {} }
     }));

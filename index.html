@@ -14,18 +14,35 @@
     Данные (из ds get / поллера) при file:// не забираются через fetch().
     Манифест грузится инъекцией <script> с fallback data/ -> sample-data/.
     Дальнейшие файлы источников тем же способом подгружает main.js. См. docs/contract.md
+
+    Пресет по умолчанию — тоже данные, не код: после манифеста тем же способом
+    грузится base.js из того же каталога, что и манифест. sample-data/base.js
+    коммитится (есть всегда); data/base.js — опционален (кладёт пользователь или
+    поллер рядом со своими данными), при его отсутствии подставляется пустой
+    пресет (см. store.js::basePreset) — пресет sample-data к чужим данным
+    подставлять нельзя, он про поля CRM/ERP, которых может не быть.
   -->
   <script>
     window.DS = { sources: {} };
     window.__ds = (function () {
       var resolve;
       var ready = new Promise(function (r) { resolve = r; });
+
+      function loadBasePreset(dir) {
+        var s = document.createElement('script');
+        s.src = dir + '/base.js';
+        var done = function () {
+          resolve({ dataDir: dir, manifest: window.DS_MANIFEST || null });
+        };
+        s.onload = done;
+        s.onerror = done;   // нет base.js в data/ — не ошибка, просто пустой пресет
+        document.head.appendChild(s);
+      }
+
       function tryDir(dir, isLast) {
         var s = document.createElement('script');
         s.src = dir + '/manifest.js';
-        s.onload = function () {
-          resolve({ dataDir: dir, manifest: window.DS_MANIFEST || null });
-        };
+        s.onload = function () { loadBasePreset(dir); };
         s.onerror = function () {
           if (isLast) resolve({ dataDir: null, manifest: null });
           else tryDir('sample-data', true);
@@ -36,7 +53,6 @@
       return { ready: ready };
     })();
   </script>
-  <script src="presets.js"></script>
   <script src="util.js"></script>
   <script src="effects.js"></script>
   <script src="dataset.js"></script>
