@@ -128,6 +128,20 @@
   var lastDataset = null;   // ссылка, не сигнатура — build/success всегда создаёт новый объект
   var lastAdvOpen = null;
 
+  // высота .nav — переменная (переносится на 2 строки на узких окнах), поэтому
+  // меряем реально, а не хардкодим: sticky-шапка таблицы (styles.css) прилипает
+  // под навбаром, а не поверх него (var(--nav-h) в table.data thead th)
+  var syncNavHeight = function () {
+    var nav = root.firstChild;
+    var docEl = document.documentElement;
+    if (nav && docEl && docEl.style && typeof docEl.style.setProperty === 'function') {
+      docEl.style.setProperty('--nav-h', (nav.offsetHeight || 0) + 'px');
+    }
+  };
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('resize', syncNavHeight);
+  }
+
   var render = function (state) {
     var d = store.dispatch;
 
@@ -140,6 +154,7 @@
     if (state.building && !state.dataset) {
       clear(root);
       root.appendChild(viewNav(state, d));
+      syncNavHeight();
       root.appendChild(el('section', { class: 'page' },
         el('p', { class: 'muted' }, 'Открываю таблицу по пресету по умолчанию…')));
       lastRoute = null;
@@ -160,6 +175,7 @@
     if (shellChanged || root.children.length < 2) {
       clear(root);
       root.appendChild(viewNav(state, d));
+      syncNavHeight();
       root.appendChild(state.route === 'build' ? viewBuild(state, d) : viewTableShell(state, d));
       lastRoute = state.route;
       lastDataset = state.dataset;

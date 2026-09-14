@@ -69,7 +69,7 @@
       ),
       el('span', { class: 'spacer' }),
       el('label', { class: 'field small', title: 'подставляется в имя выгружаемого файла как «источник»' },
-        'Автор',
+        'Пользователь',
         el('input', {
           type: 'text', value: state.author, placeholder: 'user',
           onchange: function (e) { d({ type: 'ui/setAuthor', value: e.target.value }); }
@@ -81,13 +81,15 @@
 
     return el('section', { class: 'page table' },
       el('h1', {}, 'Таблица'),
-      state.dataset
-        ? el('p', { class: 'muted' }, 'Пресет «' + state.preset.name + '», источники: '
-            + selectedNames(state.preset).join(' + ')
-            + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент'))
-        : null,
-      state.dataset ? toolbar : null,
-      el('div', { class: 'advfilter', id: 'advfilter' }),
+      el('div', { class: 'table-headbar' },
+        state.dataset
+          ? el('p', { class: 'muted' }, 'Пресет «' + state.preset.name + '», источники: '
+              + selectedNames(state.preset).join(' + ')
+              + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент'))
+          : null,
+        state.dataset ? toolbar : null,
+        el('div', { class: 'advfilter', id: 'advfilter' })
+      ),
       el('div', { class: 'grid-wrap', id: 'grid' })
     );
   };

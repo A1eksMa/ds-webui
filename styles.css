@@ -202,6 +202,14 @@ body.grid-wide .scroll {
   margin-left: calc(50% - 50vw + 1rem);
   margin-right: calc(50% - 50vw + 1rem);
 }
+/* та же логика для шапки над таблицей (подзаголовок+тулбар+фильтр) — иначе
+   при широком окне (два монитора) она остаётся по центру колонки .app,
+   т.е. на стыке мониторов, а не рядом с самой (уже широкой) таблицей.
+   Заголовок страницы (h1 «Таблица») в этот блок не входит — остаётся в .app. */
+body.grid-wide .table-headbar {
+  margin-left: calc(50% - 50vw + 1rem);
+  margin-right: calc(50% - 50vw + 1rem);
+}
 table.data {
   border-collapse: collapse; font-size: .9em;
   table-layout: fixed; min-width: 100%;   /* ширину (сумму столбцов) ставит renderGrid инлайном */
@@ -214,7 +222,10 @@ table.data th { position: relative; white-space: nowrap; }
 /* значение переносится по ширине столбца (фикс. раскладка), не распирает таблицу */
 table.data td { overflow: hidden; overflow-wrap: anywhere; }
 table.data thead th {
-  position: sticky; top: 0; background: var(--head-bg); z-index: 2;
+  /* var(--nav-h) выставляет main.js по факт. высоте .nav (тоже sticky, top:0) —
+     иначе шапка таблицы прилипает В ТОЧНОСТИ туда же и оказывается под навбаром,
+     визуально пропадая при скролле */
+  position: sticky; top: var(--nav-h, 0px); background: var(--head-bg); z-index: 2;
 }
 table.data .col-name { font-weight: 600; }
 table.data .col-filter-field {
