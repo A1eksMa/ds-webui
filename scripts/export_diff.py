@@ -30,15 +30,26 @@ Excel-файла, выгруженного веб-мордой ds-webui.
 `ds` повторной записью того же значения — формат `ds` не умеет «эту ячейку не
 трогать». Оверхед ограничен (изменённые id × изменённые label).
 """
+import inspect
 import logging
+import os
+import sys
+
+# Провайдер офисного пакета exec()-ит каждый скрипт в свежий модуль, не добавляя
+# его папку в sys.path (в отличие от обычного запуска `python script.py`) —
+# без этого `import common` падает с ModuleNotFoundError, даже когда common.py
+# лежит рядом. __file__ в этом exec-механизме не гарантирован — берём путь через
+# inspect.currentframe(): traceback показывает, что реальный путь файла в
+# compile() всё же попадает.
+_SCRIPT_DIR = os.path.dirname(inspect.getfile(inspect.currentframe()))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
 
 import common
 
 USER_SHEET = "user"
 SYSTEM_SHEET = "system"
 KEY_COLUMN = ""  # имя ключевого столбца; пусто -> первый столбец листа `user`
-
-g_exportedScripts = ()  # переопределяется ниже
 
 
 def _same(a: str, b: str) -> bool:
