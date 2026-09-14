@@ -1191,6 +1191,41 @@
   };
 
   // ---------------------------------------------------------------------------
+  // Экспорт чистых функций для node:test (см. tests/). `module` не существует
+  // как глобал ни в одном браузере, поэтому в браузере эта ветка не заходит и
+  // ничего не меняет — до этой строки код идентичен предыдущей версии.
+  // Дальше по файлу — эффекты и монтаж в DOM (document/window), в Node не нужны.
+  // ---------------------------------------------------------------------------
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      // утилиты
+      pipe: pipe, uniq: uniq, groupBy: groupBy, setIn: setIn, omit: omit, fmtDate: fmtDate,
+      // датасет: join / фильтры / условия выборки / расширенный фильтр / сортировка
+      isStale: isStale, manifestSource: manifestSource, selectedNames: selectedNames,
+      joinSources: joinSources, matchesFilter: matchesFilter, applyFilters: applyFilters,
+      OPERATORS: OPERATORS, OP_IDS: OP_IDS, OP_NO_VALUE: OP_NO_VALUE, OP_LIST: OP_LIST,
+      parseList: parseList, matchCondition: matchCondition, conditionActive: conditionActive,
+      applyConditions: applyConditions, evalRowGroups: evalRowGroups, applyAdvanced: applyAdvanced,
+      compareValues: compareValues, applySort: applySort,
+      // сущности: типизация / парсинг чисел, дат, bool / резолюция коллизий
+      DEFAULT_COL_W: DEFAULT_COL_W, MIN_COL_W: MIN_COL_W,
+      ENTITY_TYPES: ENTITY_TYPES, ENTITY_KINDS: ENTITY_KINDS, DERIVED_OPS: DERIVED_OPS,
+      parseNum: parseNum, parseDate: parseDate, formatDate: formatDate, parseBool: parseBool,
+      typeCell: typeCell, resolveCell: resolveCell, implicitEntities: implicitEntities,
+      entityOutNames: entityOutNames, resolveEntities: resolveEntities, parseTypes: parseTypes,
+      presetColumns: presetColumns, mergeEntity: mergeEntity,
+      // выгрузка в CSV/Excel
+      pad: pad, sanitizeAuthor: sanitizeAuthor, exportFilename: exportFilename,
+      toCsv: toCsv, xmlEsc: xmlEsc, xlsRow: xlsRow, xlsWorksheet: xlsWorksheet, toXlsWorkbook: toXlsWorkbook,
+      // store / нормализация пресета
+      createStore: createStore, normalizePreset: normalizePreset, normalizeColWidths: normalizeColWidths,
+      normalizeEntities: normalizeEntities, normalizeConditions: normalizeConditions,
+      initialState: initialState, reducer: reducer
+    };
+    return;
+  }
+
+  // ---------------------------------------------------------------------------
   // Эффект построения датасета (грузит источники, джойнит)
   // ---------------------------------------------------------------------------
 
