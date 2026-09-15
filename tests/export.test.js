@@ -15,13 +15,18 @@ test('xmlEsc: экранирует спецсимволы XML', () => {
   assert.equal(App.xmlEsc('A&B <tag> "q"'), 'A&amp;B &lt;tag&gt; &quot;q&quot;');
 });
 
-test('sanitizeAuthor: заменяет запрещённые символы, пустое -> user', () => {
+test('sanitizeAuthor: заменяет запрещённые символы, пустое -> export', () => {
   assert.equal(App.sanitizeAuthor('  John Doe/Corp '), 'John-Doe-Corp');
-  assert.equal(App.sanitizeAuthor(''), 'user');
-  assert.equal(App.sanitizeAuthor(null), 'user');
+  assert.equal(App.sanitizeAuthor(''), 'export');
+  assert.equal(App.sanitizeAuthor(null), 'export');
 });
 
 test('exportFilename: детерминированное имя по неймингу ds-loader', () => {
   const when = new Date(2024, 1, 5, 3, 4, 5, 6); // 2024-02-05 03:04:05.006 (локальное)
   assert.equal(App.exportFilename('Alice', 'csv', when), 'Alice_2024-02-05_03-04-05_006000.csv');
+});
+
+test('exportFilename: без имени (поле «Пользователь» убрано из UI) -> export_...', () => {
+  const when = new Date(2024, 1, 5, 3, 4, 5, 6);
+  assert.equal(App.exportFilename(null, 'xls', when), 'export_2024-02-05_03-04-05_006000.xls');
 });

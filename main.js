@@ -108,14 +108,14 @@
     var widthsPt = e.columns.map(function (c) {
       return Math.max(24, Math.min(720, Math.round(W(c) * 0.75)));
     });
-    download(exportFilename(state.author, 'xls'),
+    download(exportFilename(null, 'xls'),
       toXlsWorkbook(e.dataset, e.columns, widthsPt), 'application/vnd.ms-excel');
   };
 
   var exportCsv = function (state) {
     if (!state.dataset) return;
     var e = exportDataset(state);
-    download(exportFilename(state.author, 'csv'), toCsv(e.dataset, e.columns), 'text/csv');
+    download(exportFilename(null, 'csv'), toCsv(e.dataset, e.columns), 'text/csv');
   };
 
   // ---------------------------------------------------------------------------
@@ -198,7 +198,6 @@
       renderGrid(state, d);
     }
     if (state.preset) storage.set('preset', state.preset);
-    storage.set('author', state.author);
     storage.set('wideTable', state.wideTable);
   };
 
@@ -214,7 +213,6 @@
     // читаем сохранённое ДО первого полноценного render — иначе он перезапишет
     // ключи текущим (ещё дефолтным) состоянием
     var saved = storage.get('preset');
-    var savedAuthor = storage.get('author');
     var savedWide = storage.get('wideTable') === true;
 
     store.dispatch({
@@ -223,9 +221,6 @@
       dataDir: boot ? boot.dataDir : null
     });
     store.dispatch({ type: 'preset/set', preset: saved || basePreset() });
-    if (typeof savedAuthor === 'string') {
-      store.dispatch({ type: 'ui/setAuthor', value: savedAuthor });
-    }
     store.dispatch({ type: 'ui/setWideTable', value: savedWide });
     // применить пресет по умолчанию и сразу открыть таблицу; при ошибке
     // (нет данных / нет источника) buildDataset оставит пользователя в конструкторе

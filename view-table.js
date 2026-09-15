@@ -61,13 +61,6 @@
         'во всю ширину окна'
       ),
       el('span', { class: 'spacer' }),
-      el('label', { class: 'field small', title: 'подставляется в имя выгружаемого файла как «источник»' },
-        'Пользователь',
-        el('input', {
-          type: 'text', value: state.author, placeholder: 'user',
-          onchange: function (e) { d({ type: 'ui/setAuthor', value: e.target.value }); }
-        })
-      ),
       el('button', { onclick: function () { window.DS_APP.exportXls(window.DS_APP.store.getState()); } }, 'Выгрузить в Excel'),
       el('button', { onclick: function () { window.DS_APP.exportCsv(window.DS_APP.store.getState()); } }, 'CSV')
     );

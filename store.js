@@ -125,7 +125,6 @@
     manifest: null,
     dataDir: null,
     preset: null,
-    author: '',              // «источник» в имени выгружаемого файла
     building: false,
     buildError: null,
     dataset: null,
@@ -155,9 +154,6 @@
 
       case 'preset/setName':
         return setIn(state, ['preset', 'name'], String(a.value == null ? '' : a.value));
-
-      case 'ui/setAuthor':
-        return Object.assign({}, state, { author: String(a.value == null ? '' : a.value) });
 
       case 'ui/setWideTable':
         return Object.assign({}, state, { wideTable: !!a.value });
