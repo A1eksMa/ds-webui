@@ -91,8 +91,6 @@
       );
     };
 
-    var shown = applyAdvanced(state.dataset, state.adv).rows.length;
-
     var groupRow = function (col, i) {
       return el('div', { class: 'condition' },
         el('select', { onchange: function (e) { d({ type: 'group/update', index: i, column: e.target.value }); } },
@@ -115,13 +113,10 @@
       el('h2', { style: 'margin-top:0' }, 'Установить фильтр'),
       state.adv.length ? el('div', { class: 'conditions' }, state.adv.map(advRow)) : null,
       el('div', { class: 'advfilter-foot' },
-        el('button', { class: 'link', onclick: function () { d({ type: 'adv/add' }); } }, '+ условие'),
-        el('button', {
-          class: 'link', disabled: !state.adv.length,
-          onclick: function () { d({ type: 'adv/reset' }); }
-        }, 'сбросить условия'),
-        el('span', { class: 'muted' }, 'показано ' + shown + ' из ' + state.dataset.rows.length)
+        el('button', { class: 'link', onclick: function () { d({ type: 'adv/add' }); } }, '+ условие')
       ),
+
+      el('div', { class: 'divider' }),
 
       el('h2', {}, 'Отсортировать'),
       state.groupBy.length ? el('div', { class: 'conditions' }, state.groupBy.map(groupRow)) : null,
@@ -129,12 +124,23 @@
         el('button', { class: 'link', onclick: function () { d({ type: 'group/add' }); } }, '+ уровень группировки')
       ),
 
+      el('div', { class: 'divider' }),
+
       el('label', { class: 'chk' },
         el('input', {
           type: 'checkbox', checked: state.hideEmpty,
           onchange: function () { d({ type: 'table/toggleHideEmpty' }); }
         }),
         'скрыть пустые колонки'
+      ),
+
+      el('div', { class: 'divider' }),
+
+      el('div', { class: 'actions' },
+        el('button', {
+          disabled: !state.adv.length,
+          onclick: function () { d({ type: 'adv/reset' }); }
+        }, 'Сбросить условия')
       )
     ));
   };
