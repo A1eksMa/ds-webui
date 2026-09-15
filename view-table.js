@@ -249,14 +249,16 @@
       );
       var sortDir = state.sort && state.sort.col === c ? state.sort.dir : null;
       return el('th', {},
-        el('div', {
-          class: 'col-name' + (sortDir ? ' sorted' : ''),
-          title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
-          onclick: function () { d({ type: 'table/sort', column: c }); }
-        },
-          el('span', { class: 'col-name-txt' }, c),
-          sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
-        field,
+        el('div', { class: 'th-inner' },
+          el('div', {
+            class: 'col-name' + (sortDir ? ' sorted' : ''),
+            title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
+            onclick: function () { d({ type: 'table/sort', column: c }); }
+          },
+            el('span', { class: 'col-name-txt' }, c),
+            sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
+          field
+        ),
         el('div', {
           class: 'col-resizer',
           title: 'Потяните — ширина столбца; двойной клик — сброс',

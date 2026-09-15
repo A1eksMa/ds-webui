@@ -223,14 +223,17 @@ body.grid-wide .table-headbar {
   margin-right: calc(50% - 50vw + 1rem);
 }
 table.data {
-  border-collapse: collapse; font-size: .9em;
+  /* separate, не collapse — иначе при collapse граница между ячейками рисуется
+     РОВНО на стыке строк (наполовину заходя на соседнюю), и акцентная 2px-граница
+     шапки (ниже) визуально "подъедала" верх первой строки данных */
+  border-collapse: separate; border-spacing: 0; font-size: .9em;
   table-layout: fixed; min-width: 100%;   /* ширину (сумму столбцов) ставит renderGrid инлайном */
 }
 table.data th, table.data td {
   border-bottom: 1px solid var(--border); padding: .3rem .5rem; text-align: left;
   vertical-align: top;
 }
-table.data th { position: relative; }
+table.data th { position: relative; padding: 0; }
 /* значение переносится по ширине столбца (фикс. раскладка), не распирает таблицу */
 table.data td { overflow: hidden; overflow-wrap: anywhere; }
 table.data thead th {
@@ -244,10 +247,17 @@ table.data thead th {
   background: color-mix(in srgb, var(--accent) 12%, var(--head-bg));
   border-bottom: 2px solid var(--accent);
 }
+/* .th-inner заполняет всю (растянутую по строке) высоту ячейки — заголовки разной
+   высоты (перенос по словам) больше не сбивают высоту фильтра построчно: он одной
+   и той же (margin-top:auto) прижат к нижнему краю ячейки во всех столбцах */
+table.data .th-inner {
+  display: flex; flex-direction: column; height: 100%;
+  padding: .3rem .5rem; box-sizing: border-box;
+}
 table.data .col-name { font-weight: 600; }
 table.data .col-filter-field {
   position: relative; display: flex; align-items: stretch;
-  min-width: 0; overflow: hidden; margin-top: .2rem;
+  min-width: 0; overflow: hidden; margin-top: auto; padding-top: .2rem;
 }
 table.data .col-filter { width: 100%; min-width: 0; font-size: .9em; padding-right: 1.7rem; }
 table.data .col-filter-apply {
