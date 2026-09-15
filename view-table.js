@@ -82,11 +82,6 @@
     return el('section', { class: 'page table' },
       el('h1', {}, 'Таблица'),
       el('div', { class: 'table-headbar' },
-        state.dataset
-          ? el('p', { class: 'muted' }, 'Пресет «' + state.preset.name + '», источники: '
-              + selectedNames(state.preset).join(' + ')
-              + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент'))
-          : null,
         state.dataset ? toolbar : null,
         el('div', { class: 'advfilter', id: 'advfilter' })
       ),
@@ -302,7 +297,9 @@
     }
 
     node.appendChild(el('div', { class: 'count muted' },
-      'строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
+      'Пресет «' + state.preset.name + '», источники: ' + selectedNames(state.preset).join(' + ')
+      + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент')
+      + ' · строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
       + ' · колонок: ' + cols.length));
     var gridColW = colWidthPx(state);
     var widths = cols.map(function (c) { return Number(gridColW(c)); });
