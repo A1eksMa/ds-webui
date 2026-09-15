@@ -11,7 +11,7 @@
 (function () {
 
   var App = window.DS_APP;
-  var el = App.el, clear = App.clear;
+  var el = App.el, clear = App.clear, fmtDate = App.fmtDate;
   var selectedNames = App.selectedNames, manifestSource = App.manifestSource,
       createStore = App.createStore, reducer = App.reducer, initialState = App.initialState,
       basePreset = App.basePreset;
@@ -129,10 +129,29 @@
   var lastDataset = null;   // ссылка, не сигнатура — build/success всегда создаёт новый объект
   var lastAdvOpen = null;
 
+  // единая информационная строка внизу окна: источник данных + (на «Таблице»,
+  // когда датасет уже построен) пресет/срез/строки-после-фильтров/колонки —
+  // раньше это были две отдельные строки в разных местах страницы
+  var footerText = function (state) {
+    var parts = [state.dataDir ? ('данные: ' + state.dataDir + '/') : 'нет data/ и sample-data/'];
+    if (state.route === 'table' && state.dataset) {
+      var cols = visibleColumns(state.dataset, state.hideEmpty);
+      var afterAdv = applyAdvanced(state.dataset, state.adv);
+      var shownRows = applyFilters(afterAdv, state.tableFilters).rows.length;
+      parts.push(
+        'Пресет «' + state.preset.name + '», источники: ' + selectedNames(state.preset).join(' + ')
+        + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент')
+        + ' · строк: ' + shownRows + ' из ' + state.dataset.rows.length
+        + ' · колонок: ' + cols.length
+      );
+    }
+    return parts.join(' · ');
+  };
+
   var render = function (state) {
     var d = store.dispatch;
 
-    clear(footerNode).appendChild(viewFooter(state));
+    clear(footerNode).appendChild(viewFooter(footerText(state), !state.dataDir));
 
     if (!state.manifest || !state.preset) {
       clear(root).appendChild(el('p', { class: 'muted', style: 'padding:1rem' }, 'Инициализация…'));

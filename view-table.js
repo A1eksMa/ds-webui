@@ -3,28 +3,27 @@
 // Страница «Таблица»: тулбар, расширенный фильтр, грид (быстрые фильтры,
 // сортировка, группировка, ручная ширина столбцов). DOM-зависимый код — не
 // тестируется под node:test. Зависит от util.js, dataset.js, entities.js
-// (colWidthPx/MIN_COL_W), view-common.js, store.js (selectedNames). Ссылки на
-// main.js (store/exportXls/exportCsv) разрешаются лениво через window.DS_APP
-// в момент клика — main.js грузится последним, но к моменту клика все
-// скрипты уже выполнены.
+// (colWidthPx/MIN_COL_W), view-common.js. Ссылки на main.js
+// (store/exportXls/exportCsv) разрешаются лениво через window.DS_APP в момент
+// клика — main.js грузится последним, но к моменту клика все скрипты уже
+// выполнены.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
       require('./util.js'), require('./dataset.js'), require('./entities.js'),
-      require('./view-common.js'), require('./store.js')
+      require('./view-common.js')
     );
   } else {
     root.DS_APP = root.DS_APP || {};
-    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
+    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
   }
-})(typeof window !== 'undefined' ? window : this, function (Util, Dataset, Entities, ViewCommon, Store) {
+})(typeof window !== 'undefined' ? window : this, function (Util, Dataset, Entities, ViewCommon) {
 
-  var el = Util.el, clear = Util.clear, groupBy = Util.groupBy, fmtDate = Util.fmtDate;
+  var el = Util.el, clear = Util.clear, groupBy = Util.groupBy;
   var visibleColumns = Dataset.visibleColumns, applyAdvanced = Dataset.applyAdvanced,
       applyFilters = Dataset.applyFilters, applySort = Dataset.applySort, OP_LIST = Dataset.OP_LIST;
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
   var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl;
-  var selectedNames = Store.selectedNames;
 
   var cellNode = function (v, entity, unparsed) {
     var st = '';
@@ -357,11 +356,8 @@
       });
     }
 
-    node.appendChild(el('div', { class: 'count muted' },
-      'Пресет «' + state.preset.name + '», источники: ' + selectedNames(state.preset).join(' + ')
-      + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент')
-      + ' · строк: ' + filtered.rows.length + ' из ' + state.dataset.rows.length
-      + ' · колонок: ' + cols.length));
+    // сводка (пресет/срез/строки/колонки) переехала в строку состояния внизу
+    // окна (main.js, .statusbar) — единое место для всей информационной строки
     var gridColW = colWidthPx(state);
     var widths = cols.map(function (c) { return Number(gridColW(c)); });
     var colgroup = el('colgroup', {}, widths.map(function (w) {

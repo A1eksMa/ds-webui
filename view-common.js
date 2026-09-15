@@ -84,12 +84,10 @@
 
   // содержимое строки состояния внизу окна (как во многих десктоп-приложениях)
   // — сам <footer> создаётся один раз в main.js и не прокручивается вместе со
-  // страницей, всегда на виду. Единственное содержимое сейчас — источник
-  // данных (data/ или sample-data/).
-  var viewFooter = function (state) {
-    return state.dataDir
-      ? el('span', { class: 'muted' }, 'данные: ' + state.dataDir + '/')
-      : el('span', { class: 'muted warn' }, 'нет data/ и sample-data/');
+  // страницей, всегда на виду. Текст целиком собирает main.js (там же, где
+  // источники данных и пайплайн фильтров «Таблицы») — здесь только обёртка.
+  var viewFooter = function (text, warn) {
+    return el('span', { class: 'muted' + (warn ? ' warn' : '') }, text);
   };
 
   return { opSelect: opSelect, valueControl: valueControl, viewNav: viewNav, viewFooter: viewFooter };

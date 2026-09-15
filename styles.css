@@ -212,7 +212,6 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .toolbar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: .5rem 0; }
 .toolbar .spacer { flex: 1; }
 .grp-actions { margin: .3rem 0; display: flex; gap: .3rem; }
-.count { margin: .3rem 0; }
 /* .scroll — осознанно ограниченная по высоте область (как замороженные области
    в Excel): скроллится сама, и по горизонтали, и по вертикали. Раньше пытались
    держать .scroll БЕЗ ограничения высоты (overflow-x:auto, оставляя вертикаль
