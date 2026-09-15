@@ -23,8 +23,8 @@
       parseTypes = App.parseTypes, colWidthPx = App.colWidthPx;
   var toCsv = App.toCsv, toXlsWorkbook = App.toXlsWorkbook, exportFilename = App.exportFilename;
   var viewNav = App.viewNav, viewFooter = App.viewFooter, viewBuild = App.viewBuild,
-      viewTableShell = App.viewTableShell, viewFilter = App.viewFilter, viewExport = App.viewExport,
-      renderGrid = App.renderGrid;
+      viewTableShell = App.viewTableShell, renderAdvFilter = App.renderAdvFilter,
+      renderExportPanel = App.renderExportPanel, renderGrid = App.renderGrid;
 
   // ---------------------------------------------------------------------------
   // Эффект построения датасета (грузит источники, джойнит)
@@ -128,6 +128,8 @@
   var footerNode = document.body.appendChild(el('footer', { class: 'statusbar' }));
   var lastRoute = null;
   var lastDataset = null;   // ссылка, не сигнатура — build/success всегда создаёт новый объект
+  var lastAdvOpen = null;
+  var lastExportOpen = null;
 
   // единая информационная строка внизу окна: источник данных + (на «Таблице»,
   // когда датасет уже построен) пресет/срез/строки-после-фильтров/колонки —
@@ -170,35 +172,33 @@
     }
 
     // Пересоздать шапку/тело страницы, только когда действительно нужно: сменился
-    // маршрут или случилась НОВАЯ сборка (build/success — всегда новая ссылка на
+    // маршрут, случилась НОВАЯ сборка (build/success — всегда новая ссылка на
     // dataset, даже если её форма совпала с предыдущей: например, изменился только
-    // as_of или имя пресета, а колонки/число строк те же). Раньше вместо ссылки
-    // сравнивалась сигнатура "columns+rows.length" — она совпадала для двух
-    // РАЗНЫХ сборок с одинаковой формой, и шапка (там же — имя пресета и срез
-    // as_of) оставалась от старой сборки.
-    var shellChanged = state.route !== lastRoute || state.dataset !== lastDataset;
+    // as_of или имя пресета, а колонки/число строк те же) или открылась/закрылась
+    // область экспорта/расширенного фильтра над таблицей (от этого зависит и
+    // индикатор ▸/▾ в самом навбаре, не только тело страницы). Раньше вместо
+    // ссылки сравнивалась сигнатура "columns+rows.length" — она совпадала для
+    // двух РАЗНЫХ сборок с одинаковой формой, и шапка (там же — имя пресета и
+    // срез as_of) оставалась от старой сборки.
+    var shellChanged = state.route !== lastRoute || state.dataset !== lastDataset
+      || state.advOpen !== lastAdvOpen || state.exportOpen !== lastExportOpen;
 
     if (shellChanged || root.children.length < 2) {
       clear(root);
       root.appendChild(viewNav(state, d));
-      root.appendChild(
-        state.route === 'build' ? viewBuild(state, d)
-          : state.route === 'filter' ? viewFilter(state, d)
-          : state.route === 'export' ? viewExport(state, d)
-          : viewTableShell(state, d)
-      );
+      root.appendChild(state.route === 'build' ? viewBuild(state, d) : viewTableShell(state, d));
       lastRoute = state.route;
       lastDataset = state.dataset;
+      lastAdvOpen = state.advOpen;
+      lastExportOpen = state.exportOpen;
     } else if (state.route === 'build') {
       // build-страница: переть целиком (инпуты — на onchange, фокус не теряется)
       root.replaceChild(viewBuild(state, d), root.children[1]);
-    } else if (state.route === 'filter') {
-      root.replaceChild(viewFilter(state, d), root.children[1]);
-    } else if (state.route === 'export') {
-      root.replaceChild(viewExport(state, d), root.children[1]);
     }
 
     if (state.route === 'table') {
+      renderExportPanel(state, d);
+      renderAdvFilter(state, d);
       renderGrid(state, d);
     }
     if (state.preset) storage.set('preset', state.preset);

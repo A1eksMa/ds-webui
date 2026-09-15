@@ -66,6 +66,9 @@ h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transfor
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 5;
 }
+/* заметно крупнее обычного текста — заодно увеличивает высоту навбара,
+   давая кнопкам меню больше воздуха вокруг */
+.nav strong { font-size: 1.5rem; font-weight: 700; }
 .nav .spacer { flex: 1; }
 /* строка состояния внизу окна (как во многих десктоп-приложениях) — не .app,
    а прямой ребёнок body: своя горизонтальная отбивка (.app её не даёт снаружи
@@ -185,8 +188,16 @@ input[type=text], select {
 }
 .cond-list-tools { display: flex; align-items: center; gap: .6rem; font-size: .85em; }
 
-/* «Расширенный фильтр» — отдельная страница (не оверлей-панель над таблицей,
-   как было раньше), поэтому своего фона/рамки не требует — как и «Настройки» */
+/* «Расширенный фильтр» / «Экспорт» — скрытые по умолчанию области НАД
+   таблицей (не отдельные страницы — данные таблицы остаются на виду, пока с
+   ними работаешь): обёртка .advfilter схлопывается в ноль, когда пусто (обе
+   закрыты), .advfilter-panel — видимая рамка+фон открытой области. */
+.advfilter { margin: 0; }
+.advfilter:not(:empty) { margin: .5rem 0; }
+.advfilter-panel {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--head-bg); padding: .6rem .75rem;
+}
 .advfilter-foot { display: flex; align-items: center; gap: 1rem; margin-top: .35rem; }
 .adv-conj { min-width: 4rem; }
 .adv-conj-spacer { display: inline-block; width: 4rem; }

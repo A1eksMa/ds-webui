@@ -135,8 +135,10 @@
     srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
     entOpen: true,            // конструктор: развёрнут ли блок «Сущности»
     adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
+    advOpen: false,          // область расширенного фильтра над таблицей развёрнута
     sort: null,              // { col, dir: 'asc'|'desc' } | null — сортировка столбца
-    exportFormat: 'xls'      // выбор формата на странице «Экспорт» ('xls' | 'csv')
+    exportFormat: 'xls',     // выбор формата в области экспорта ('xls' | 'csv')
+    exportOpen: false        // область экспорта над таблицей развёрнута
   };
 
   var reducer = function (state, a) {
@@ -359,6 +361,12 @@
 
       case 'ui/setExportFormat':
         return Object.assign({}, state, { exportFormat: a.value });
+
+      case 'export/toggle':
+        return Object.assign({}, state, { exportOpen: !state.exportOpen });
+
+      case 'adv/toggle':
+        return Object.assign({}, state, { advOpen: !state.advOpen });
 
       case 'adv/add':
         return Object.assign({}, state, {

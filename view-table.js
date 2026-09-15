@@ -1,14 +1,18 @@
 'use strict';
 
-// Три страницы «Таблицы»-роутов: viewTableShell (сам грид: быстрые фильтры,
-// сортировка по клику, группировка, ручная ширина столбцов), viewFilter
-// (расширенный фильтр + сортировка/группировка — временные, не в пресете) и
-// viewExport (выбор формата и запуск выгрузки). DOM-зависимый код — не
-// тестируется под node:test. Зависит от util.js, dataset.js, entities.js
-// (colWidthPx/MIN_COL_W), view-common.js. Ссылки на main.js
-// (store/exportXls/exportCsv) разрешаются лениво через window.DS_APP в момент
-// клика — main.js грузится последним, но к моменту клика все скрипты уже
-// выполнены.
+// Страница «Таблица»: viewTableShell (грид: быстрые фильтры, сортировка по
+// клику, группировка, ручная ширина столбцов) + две скрытые по умолчанию
+// области над ним, каждая открывается/закрывается своей кнопкой в навбаре
+// (данные таблицы остаются на виду, пока с ними работаешь): renderAdvFilter
+// (условия + сортировка/группировка — временные, не в пресете) и
+// renderExportPanel (выбор формата + запуск выгрузки). Обе — императивные,
+// как renderGrid: клирят и перестраивают свой персистентный div на каждый
+// render(), независимо от того, пересобиралась ли вся оболочка страницы.
+// DOM-зависимый код — не тестируется под node:test. Зависит от util.js,
+// dataset.js, entities.js (colWidthPx/MIN_COL_W), view-common.js. Ссылки на
+// main.js (store/exportXls/exportCsv) разрешаются лениво через window.DS_APP
+// в момент клика — main.js грузится последним, но к моменту клика все
+// скрипты уже выполнены.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
@@ -48,15 +52,27 @@
 
   var viewTableShell = function (state, d) {
     return el('section', { class: 'page table' },
+      el('div', { class: 'table-headbar' },
+        el('div', { class: 'advfilter', id: 'export-panel' }),
+        el('div', { class: 'advfilter', id: 'advfilter' })
+      ),
       el('div', { class: 'grid-wrap', id: 'grid' })
     );
   };
 
-  // ---- «Расширенный фильтр» — отдельная страница (условия + сортировка) ---
-  // временные, поверх пресета, не сохраняются (не в пресете, не в localStorage)
+  // ---- «Расширенный фильтр» — скрытая по умолчанию область НАД таблицей
+  // (условия + сортировка), открывается/закрывается кнопкой в навбаре;
+  // временные, поверх пресета, не сохраняются (не в пресете, не в
+  // localStorage). Данные таблицы остаются на виду, пока их фильтруешь —
+  // в отличие от отдельной страницы, где таблицы не видно вообще.
 
-  var viewFilter = function (state, d) {
-    var cols = state.dataset ? state.dataset.columns : [];
+  var renderAdvFilter = function (state, d) {
+    var node = document.getElementById('advfilter');
+    if (!node) return;
+    clear(node);
+    if (!state.advOpen || !state.dataset) return;
+
+    var cols = state.dataset.columns;
     var advRow = function (row, i) {
       var patch = function (p) { d({ type: 'adv/update', index: i, patch: p }); };
       return el('div', { class: 'condition' + (OP_LIST[row.op] ? ' has-list' : '') },
@@ -75,7 +91,7 @@
       );
     };
 
-    var shown = state.dataset ? applyAdvanced(state.dataset, state.adv).rows.length : 0;
+    var shown = applyAdvanced(state.dataset, state.adv).rows.length;
 
     var groupRow = function (col, i) {
       return el('div', { class: 'condition' },
@@ -95,10 +111,8 @@
       );
     };
 
-    return el('section', { class: 'page filter' },
-      el('h1', {}, 'Расширенный фильтр'),
-
-      el('h2', {}, 'Установить фильтр'),
+    node.appendChild(el('div', { class: 'advfilter-panel' },
+      el('h2', { style: 'margin-top:0' }, 'Установить фильтр'),
       state.adv.length ? el('div', { class: 'conditions' }, state.adv.map(advRow)) : null,
       el('div', { class: 'advfilter-foot' },
         el('button', { class: 'link', onclick: function () { d({ type: 'adv/add' }); } }, '+ условие'),
@@ -106,7 +120,7 @@
           class: 'link', disabled: !state.adv.length,
           onclick: function () { d({ type: 'adv/reset' }); }
         }, 'сбросить условия'),
-        el('span', { class: 'muted' }, 'показано ' + shown + ' из ' + (state.dataset ? state.dataset.rows.length : 0))
+        el('span', { class: 'muted' }, 'показано ' + shown + ' из ' + state.dataset.rows.length)
       ),
 
       el('h2', {}, 'Отсортировать'),
@@ -115,29 +129,26 @@
         el('button', { class: 'link', onclick: function () { d({ type: 'group/add' }); } }, '+ уровень группировки')
       ),
 
-      el('div', { class: 'row' },
-        el('label', { class: 'chk' },
-          el('input', {
-            type: 'checkbox', checked: state.hideEmpty,
-            onchange: function () { d({ type: 'table/toggleHideEmpty' }); }
-          }),
-          'скрыть пустые колонки'
-        )
-      ),
-
-      el('div', { class: 'actions' },
-        el('button', {
-          class: 'primary', onclick: function () { d({ type: 'route/set', route: 'table' }); }
-        }, 'Готово')
+      el('label', { class: 'chk' },
+        el('input', {
+          type: 'checkbox', checked: state.hideEmpty,
+          onchange: function () { d({ type: 'table/toggleHideEmpty' }); }
+        }),
+        'скрыть пустые колонки'
       )
-    );
+    ));
   };
 
-  // ---- «Экспорт» — отдельная страница: выбор формата + действие -----------
+  // ---- «Экспорт» — скрытая по умолчанию область над таблицей: выбор
+  // формата + действие; та же схема, что и у расширенного фильтра.
 
-  var viewExport = function (state, d) {
-    return el('section', { class: 'page export' },
-      el('h1', {}, 'Экспорт'),
+  var renderExportPanel = function (state, d) {
+    var node = document.getElementById('export-panel');
+    if (!node) return;
+    clear(node);
+    if (!state.exportOpen || !state.dataset) return;
+
+    node.appendChild(el('div', { class: 'advfilter-panel' },
       el('div', { class: 'row' },
         el('label', { class: 'chk' },
           el('input', {
@@ -152,19 +163,15 @@
             onchange: function () { d({ type: 'ui/setExportFormat', value: 'csv' }); }
           }),
           'CSV'
-        )
-      ),
-      el('div', { class: 'actions' },
+        ),
         el('button', {
-          class: 'primary', disabled: !state.dataset,
-          onclick: function () {
+          class: 'primary', onclick: function () {
             var st = window.DS_APP.store.getState();
             if (st.exportFormat === 'csv') window.DS_APP.exportCsv(st); else window.DS_APP.exportXls(st);
-            d({ type: 'route/set', route: 'table' });
           }
         }, 'Экспортировать')
       )
-    );
+    ));
   };
 
   // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
@@ -386,7 +393,7 @@
   };
 
   return {
-    cellNode: cellNode, viewTableShell: viewTableShell, viewFilter: viewFilter,
-    viewExport: viewExport, renderGrid: renderGrid
+    cellNode: cellNode, viewTableShell: viewTableShell, renderAdvFilter: renderAdvFilter,
+    renderExportPanel: renderExportPanel, renderGrid: renderGrid
   };
 });
