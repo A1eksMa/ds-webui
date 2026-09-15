@@ -23,8 +23,9 @@
       parseTypes = App.parseTypes, colWidthPx = App.colWidthPx;
   var toCsv = App.toCsv, toXlsWorkbook = App.toXlsWorkbook, exportFilename = App.exportFilename;
   var viewNav = App.viewNav, viewFooter = App.viewFooter, viewBuild = App.viewBuild,
-      viewTableShell = App.viewTableShell, renderAdvFilter = App.renderAdvFilter,
-      renderExportPanel = App.renderExportPanel, renderGrid = App.renderGrid;
+      viewEntities = App.viewEntities, viewTableShell = App.viewTableShell,
+      renderAdvFilter = App.renderAdvFilter, renderExportPanel = App.renderExportPanel,
+      renderGrid = App.renderGrid;
 
   // ---------------------------------------------------------------------------
   // Эффект построения датасета (грузит источники, джойнит)
@@ -193,7 +194,11 @@
     if (shellChanged || root.children.length < 2) {
       clear(root);
       root.appendChild(viewNav(state, d));
-      root.appendChild(state.route === 'build' ? viewBuild(state, d) : viewTableShell(state, d));
+      root.appendChild(
+        state.route === 'build' ? viewBuild(state, d)
+          : state.route === 'entities' ? viewEntities(state, d)
+          : viewTableShell(state, d)
+      );
       lastRoute = state.route;
       lastDataset = state.dataset;
       lastAdvOpen = state.advOpen;
@@ -201,6 +206,8 @@
     } else if (state.route === 'build') {
       // build-страница: переть целиком (инпуты — на onchange, фокус не теряется)
       root.replaceChild(viewBuild(state, d), root.children[1]);
+    } else if (state.route === 'entities') {
+      root.replaceChild(viewEntities(state, d), root.children[1]);
     }
 
     if (state.route === 'table') {

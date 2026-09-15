@@ -133,7 +133,6 @@
     hideEmpty: false,
     expanded: {},
     srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
-    entOpen: true,            // конструктор: развёрнут ли блок «Сущности»
     adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
     advOpen: false,          // область расширенного фильтра над таблицей развёрнута
     sort: null,              // { col, dir: 'asc'|'desc' } | null — сортировка столбца
@@ -175,9 +174,6 @@
         so[a.name] = !so[a.name];
         return Object.assign({}, state, { srcOpen: so });
       }
-
-      case 'ui/toggleEnt':
-        return Object.assign({}, state, { entOpen: !state.entOpen });
 
       case 'preset/toggleLabel': {
         var ms2 = manifestSource(state, a.source);
