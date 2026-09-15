@@ -155,7 +155,7 @@
             type: 'radio', name: 'export-format', checked: state.exportFormat !== 'csv',
             onchange: function () { d({ type: 'ui/setExportFormat', value: 'xls' }); }
           }),
-          'Excel (.xls)'
+          'Excel'
         ),
         el('label', { class: 'chk' },
           el('input', {
@@ -163,7 +163,9 @@
             onchange: function () { d({ type: 'ui/setExportFormat', value: 'csv' }); }
           }),
           'CSV'
-        ),
+        )
+      ),
+      el('div', { class: 'actions' },
         el('button', {
           class: 'primary', onclick: function () {
             var st = window.DS_APP.store.getState();
