@@ -115,10 +115,28 @@
             onclick: function () { d({ type: 'route/set', route: 'build' }); }
           }, '⚙ Настройки')
         ]
-      : el('button', {
-          class: 'gear', disabled: !state.dataset,
-          onclick: function () { d({ type: 'route/set', route: 'table' }); }
-        }, '← К таблице');
+      : state.route === 'build'
+      // «Настройки» <-> «Индикаторы» — соседние страницы конструктора
+      // (обе одного уровня, между ними логично переключаться напрямую, не
+      // заходя каждый раз через «Таблицу»); «Таблица» — вперёд, к результату.
+      ? [
+          el('button', {
+            class: 'gear', onclick: function () { d({ type: 'route/set', route: 'entities' }); }
+          }, '← К индикаторам'),
+          el('button', {
+            class: 'gear', disabled: !state.dataset,
+            onclick: function () { d({ type: 'route/set', route: 'table' }); }
+          }, 'К таблице →')
+        ]
+      : [
+          el('button', {
+            class: 'gear', disabled: !state.dataset,
+            onclick: function () { d({ type: 'route/set', route: 'table' }); }
+          }, '← К таблице'),
+          el('button', {
+            class: 'gear', onclick: function () { d({ type: 'route/set', route: 'build' }); }
+          }, 'К настройкам →')
+        ];
     return el('header', { class: 'nav' },
       el('strong', {}, 'Data Sources — Web UI'),
       el('span', { class: 'spacer' }),
