@@ -153,6 +153,12 @@
   var render = function (state) {
     var d = store.dispatch;
 
+    // только «Таблица» зажата в 100vh (см. body.route-table в styles.css) —
+    // .scroll внутри нужно реально сжимать, чтобы включился его внутренний
+    // скролл (и с ним — sticky-шапка). Другим страницам это не нужно, они
+    // растут естественно и скроллят всю страницу, когда контента много.
+    document.body.classList.toggle('route-table', state.route === 'table');
+
     clear(footerNode).appendChild(viewFooter(footerText(state), !state.dataDir));
 
     if (!state.manifest || !state.preset) {
