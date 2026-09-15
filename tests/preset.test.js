@@ -19,6 +19,28 @@ test('normalizePreset: мигрирует старое view.column_filters в vi
   assert.deepEqual(p.view.conditions, [{ field: 'Foo', op: 'contains', value: 'bar' }]);
 });
 
+test('normalizePreset: старая связка без type -> left (обратная совместимость)', () => {
+  const p = App.normalizePreset({ view: { joins: [{ left: 'CRM', left_field: 'id', right: 'ERP', right_field: 'id' }] } });
+  assert.equal(p.view.joins[0].type, 'left');
+});
+
+test('normalizePreset: нераспознанный type в связке -> left', () => {
+  const p = App.normalizePreset({ view: { joins: [{ left: 'CRM', right: 'ERP', type: 'outer-cross-nonsense' }] } });
+  assert.equal(p.view.joins[0].type, 'left');
+});
+
+test('normalizePreset: валидный type в связке сохраняется', () => {
+  const p = App.normalizePreset({ view: { joins: [{ left: 'CRM', right: 'ERP', type: 'full' }] } });
+  assert.equal(p.view.joins[0].type, 'full');
+});
+
+test("reducer: preset/addJoin добавляет связку с type 'left' по умолчанию", () => {
+  const preset = App.normalizePreset({ query: { sources: { CRM: { labels: ['id'] } } } });
+  const state = Object.assign({}, App.initialState, { preset: preset });
+  const next = App.reducer(state, { type: 'preset/addJoin' });
+  assert.equal(next.preset.view.joins[0].type, 'left');
+});
+
 test('reducer: route/set меняет текущий маршрут', () => {
   const next = App.reducer(App.initialState, { type: 'route/set', route: 'table' });
   assert.equal(next.route, 'table');

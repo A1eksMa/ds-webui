@@ -2,9 +2,9 @@
 
 // Store: фабрика createStore (reducer + dispatch + subscribe), селекторы
 // состояния, нормализация пресета, редьюсер, (де)сериализация пресета в файл.
-// Зависит от util.js (omit/setIn/_swap), dataset.js (OP_IDS), entities.js
-// (normalizeEntities/mergeEntity/_entityColumns/parseDate), effects.js
-// (download/readFile).
+// Зависит от util.js (omit/setIn/_swap), dataset.js (OP_IDS/JOIN_TYPE_IDS),
+// entities.js (normalizeEntities/mergeEntity/_entityColumns/parseDate),
+// effects.js (download/readFile).
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
@@ -17,7 +17,7 @@
 })(typeof window !== 'undefined' ? window : this, function (Util, Dataset, Entities, Effects) {
 
   var omit = Util.omit, setIn = Util.setIn, _swap = Util._swap;
-  var OP_IDS = Dataset.OP_IDS;
+  var OP_IDS = Dataset.OP_IDS, JOIN_TYPE_IDS = Dataset.JOIN_TYPE_IDS;
   var normalizeEntities = Entities.normalizeEntities, mergeEntity = Entities.mergeEntity,
       _entityColumns = Entities._entityColumns, parseDate = Entities.parseDate;
   var download = Effects.download, readFile = Effects.readFile;
@@ -74,7 +74,9 @@
         joins: Array.isArray(view.joins) ? view.joins.map(function (j) {
           return {
             left: j.left || '', left_field: j.left_field || '',
-            right: j.right || '', right_field: j.right_field || ''
+            right: j.right || '', right_field: j.right_field || '',
+            // старые пресеты без type — раньше был всегда LEFT JOIN
+            type: JOIN_TYPE_IDS.indexOf(j.type) !== -1 ? j.type : 'left'
           };
         }) : [],
         conditions: normalizeConditions(view),
@@ -214,7 +216,7 @@
 
       case 'preset/addJoin': {
         var sel = selectedNames(state.preset);
-        var j = { left: sel[0] || '', left_field: '', right: '', right_field: '' };
+        var j = { left: sel[0] || '', left_field: '', right: '', right_field: '', type: 'left' };
         return setIn(state, ['preset', 'view', 'joins'], state.preset.view.joins.concat([j]));
       }
 

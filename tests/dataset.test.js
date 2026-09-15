@@ -28,6 +28,51 @@ test('joinSources: несовпавший LEFT JOIN оставляет undefined
   assert.equal(out.rows[0]['ERP.price'], undefined);
 });
 
+test('joinSources: без type в связке — поведение как раньше (LEFT по умолчанию)', () => {
+  const crm = { name: 'CRM', key: 'id', labels: ['id'], data: [{ id: '1' }, { id: '2' }] };
+  const erp = { name: 'ERP', key: 'id', labels: ['price'], data: [{ id: '1', price: '10' }] };
+  const out = App.joinSources([crm, erp], [{ left: 'CRM', left_field: 'id', right: 'ERP', right_field: 'id' }]);
+  assert.equal(out.rows.length, 2);
+});
+
+test('joinSources: INNER — только совпавшие строки', () => {
+  const crm = { name: 'CRM', key: 'id', labels: ['id'], data: [{ id: '1' }, { id: '2' }] };
+  const erp = { name: 'ERP', key: 'id', labels: ['price'], data: [{ id: '1', price: '10' }] };
+  const joins = [{ left: 'CRM', left_field: 'id', right: 'ERP', right_field: 'id', type: 'inner' }];
+  const out = App.joinSources([crm, erp], joins);
+  assert.equal(out.rows.length, 1);
+  assert.equal(out.rows[0]['CRM.id'], '1');
+});
+
+test('joinSources: RIGHT — все строки правого источника, неспарившиеся строки левого выброшены', () => {
+  const crm = { name: 'CRM', key: 'id', labels: ['id'], data: [{ id: '1' }] };
+  const erp = { name: 'ERP', key: 'id', labels: ['id', 'price'], data: [{ id: '1', price: '10' }, { id: '2', price: '20' }] };
+  const joins = [{ left: 'CRM', left_field: 'id', right: 'ERP', right_field: 'id', type: 'right' }];
+  const out = App.joinSources([crm, erp], joins);
+  assert.equal(out.rows.length, 2);
+  const unmatched = out.rows.find((r) => r['ERP.id'] === '2');
+  assert.ok(unmatched, 'строка ERP.id=2 должна присутствовать');
+  assert.equal(unmatched['CRM.id'], undefined);
+});
+
+test('joinSources: FULL — объединение (совпавшие + обе стороны без пары)', () => {
+  const crm = { name: 'CRM', key: 'id', labels: ['id'], data: [{ id: '1' }, { id: '2' }] };
+  const erp = { name: 'ERP', key: 'id', labels: ['id', 'price'], data: [{ id: '1', price: '10' }, { id: '3', price: '30' }] };
+  const joins = [{ left: 'CRM', left_field: 'id', right: 'ERP', right_field: 'id', type: 'full' }];
+  const out = App.joinSources([crm, erp], joins);
+  assert.equal(out.rows.length, 3);   // (1,1) + (2,∅) + (∅,3)
+  assert.ok(out.rows.some((r) => r['CRM.id'] === '2' && r['ERP.id'] === undefined));
+  assert.ok(out.rows.some((r) => r['ERP.id'] === '3' && r['CRM.id'] === undefined));
+});
+
+test('joinSources: FULL — правая строка, уже спарившаяся хоть с одной левой, не дублируется', () => {
+  const crm = { name: 'CRM', key: 'fk', labels: ['id', 'fk'], data: [{ id: 'a', fk: '1' }, { id: 'b', fk: '1' }] };
+  const erp = { name: 'ERP', key: 'id', labels: ['id'], data: [{ id: '1' }] };
+  const joins = [{ left: 'CRM', left_field: 'fk', right: 'ERP', right_field: 'id', type: 'full' }];
+  const out = App.joinSources([crm, erp], joins);
+  assert.equal(out.rows.length, 2);   // обе строки CRM совпали с единственной ERP-строкой, лишней копии нет
+});
+
 test('matchCondition: contains регистронезависимо', () => {
   assert.equal(App.matchCondition('Hello World', { op: 'contains', value: 'WOR' }), true);
 });

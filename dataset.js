@@ -1,7 +1,8 @@
 'use strict';
 
-// Датасет: LEFT JOIN источников, условия выборки, расширенный фильтр,
-// быстрые фильтры, сортировка. Единственная зависимость — util.js (omit).
+// Датасет: JOIN источников (left/right/inner/full), условия выборки,
+// расширенный фильтр, быстрые фильтры, сортировка. Единственная зависимость —
+// util.js (omit).
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(require('./util.js'));
@@ -13,12 +14,32 @@
 
   var omit = Util.omit;
 
-  // LEFT JOIN нескольких источников. selected: [{name, key, labels, data}].
-  // joins: [{left, left_field, right, right_field}]. База — первый источник.
-  // Колонки при >1 источнике квалифицируются как "<Source>.<label>".
-  // Ключевой показатель источника — обычное выбираемое поле: он попадает в
-  // колонки, только если присутствует в s.labels (иначе используется лишь для
-  // сопоставления при JOIN).
+  // Виды связки между источниками; порядок = порядок в выпадающем списке.
+  var JOIN_TYPES = [
+    ['left', 'левое (LEFT)'],
+    ['right', 'правое (RIGHT)'],
+    ['inner', 'внутреннее (INNER)'],
+    ['full', 'полное (FULL)']
+  ];
+  var JOIN_TYPE_IDS = JOIN_TYPES.map(function (t) { return t[0]; });
+
+  // JOIN нескольких источников (LEFT/RIGHT/INNER/FULL — j.type, по умолчанию
+  // 'left', для обратной совместимости с пресетами без этого поля).
+  // selected: [{name, key, labels, data}]. joins: [{left, left_field, right,
+  // right_field, type}]. База (selected[0]) входит целиком первым шагом; каждый
+  // следующий источник присоединяется к УЖЕ накопленным строкам — j.left может
+  // называть любой источник, вошедший в выборку раньше (не обязательно
+  // непосредственно предыдущий). Колонки при >1 источнике квалифицируются как
+  // "<Source>.<label>". Ключевой показатель источника — обычное выбираемое
+  // поле: он попадает в колонки, только если присутствует в s.labels (иначе
+  // используется лишь для сопоставления при JOIN).
+  //
+  // Из-за key-based сопоставления (Map по строковому значению поля, без учёта
+  // повторов) это не полный реляционный JOIN с декартовым произведением при
+  // дублирующихся ключах справа — как и раньше, побеждает последняя строка с
+  // таким ключом. RIGHT/FULL добавляют «неспарившиеся» строки правого
+  // источника отдельным проходом — с undefined во всех остальных колонках
+  // (кроме собственных полей источника).
   var joinSources = function (selected, joins) {
     if (!selected.length) return { columns: [], rows: [] };
     var qualify = selected.length > 1;
@@ -42,20 +63,40 @@
     rest.forEach(function (s) {
       var j = joins.find(function (x) { return x.right === s.name; })
         || { left: base.name, left_field: base.key, right: s.name, right_field: s.key };
+      var type = JOIN_TYPE_IDS.indexOf(j.type) !== -1 ? j.type : 'left';
       var idx = new Map();
       s.data.forEach(function (r) {
         var k = r[j.right_field];
         if (k != null) idx.set(String(k), r);
       });
-      rows = rows.map(function (o) {
+      var usedKeys = new Set();
+
+      var merged = [];
+      rows.forEach(function (o) {
         var leftRow = o.__match[j.left];
         var key = leftRow ? leftRow[j.left_field] : undefined;
         var m = key != null ? idx.get(String(key)) : undefined;
-        s.labels.forEach(function (l) { o[col(s.name, l)] = m && l in m ? m[l] : undefined; });
-        var match = Object.assign({}, o.__match);
-        match[s.name] = m;
-        return Object.assign({}, o, { __match: match });
+        if (m) usedKeys.add(String(key));
+        if (!m && (type === 'inner' || type === 'right')) return;   // без пары справа — выбросить
+        var next = Object.assign({}, o);
+        s.labels.forEach(function (l) { next[col(s.name, l)] = m && l in m ? m[l] : undefined; });
+        next.__match = Object.assign({}, o.__match);
+        next.__match[s.name] = m;
+        merged.push(next);
       });
+
+      if (type === 'right' || type === 'full') {
+        s.data.forEach(function (r) {
+          var k = r[j.right_field];
+          if (k != null && usedKeys.has(String(k))) return;   // уже отдана хоть одной строке слева
+          var o = { __match: {} };
+          o.__match[s.name] = r;
+          s.labels.forEach(function (l) { o[col(s.name, l)] = l in r ? r[l] : undefined; });
+          merged.push(o);
+        });
+      }
+
+      rows = merged;
     });
 
     return { columns: columns, rows: rows.map(function (r) { return omit(r, '__match'); }) };
@@ -215,7 +256,8 @@
   };
 
   return {
-    joinSources: joinSources, matchesFilter: matchesFilter, applyFilters: applyFilters,
+    joinSources: joinSources, JOIN_TYPES: JOIN_TYPES, JOIN_TYPE_IDS: JOIN_TYPE_IDS,
+    matchesFilter: matchesFilter, applyFilters: applyFilters,
     OPERATORS: OPERATORS, OP_IDS: OP_IDS, OP_NO_VALUE: OP_NO_VALUE, OP_LIST: OP_LIST,
     parseList: parseList, matchCondition: matchCondition, conditionActive: conditionActive,
     applyConditions: applyConditions, evalRowGroups: evalRowGroups, applyAdvanced: applyAdvanced,

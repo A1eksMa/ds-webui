@@ -22,7 +22,7 @@
       savePreset = Store.savePreset, loadPresetFile = Store.loadPresetFile;
   var entityOutNames = Entities.entityOutNames, ENTITY_KINDS = Entities.ENTITY_KINDS,
       ENTITY_TYPES = Entities.ENTITY_TYPES, DERIVED_OPS = Entities.DERIVED_OPS;
-  var OP_LIST = Dataset.OP_LIST;
+  var OP_LIST = Dataset.OP_LIST, JOIN_TYPES = Dataset.JOIN_TYPES;
   var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl;
 
   var badge = function (ms) {
@@ -92,7 +92,14 @@
             return el('option', { value: o, selected: o === value }, o);
           })));
       };
+      var typeSelect = el('select', {
+        class: 'join-type', title: 'тип связки',
+        onchange: function (e) { d({ type: 'preset/updateJoin', index: i, patch: { type: e.target.value } }); }
+      }, JOIN_TYPES.map(function (t) {
+        return el('option', { value: t[0], selected: t[0] === (j.type || 'left') }, t[1]);
+      }));
       return el('div', { class: 'join' },
+        typeSelect,
         pick(j.left, chosen, function (v) { d({ type: 'preset/updateJoin', index: i, patch: { left: v, left_field: '' } }); }),
         el('span', { class: 'dot' }, '.'),
         pick(j.left_field, fieldsOf(j.left), function (v) { d({ type: 'preset/updateJoin', index: i, patch: { left_field: v } }); }),
@@ -287,9 +294,12 @@
         : el('p', { class: 'muted' }, 'Манифест пуст — сгенерируй данные (ds get / tools/gen_sample.py).'),
 
       chosen.length > 1 ? el('div', {},
-        el('h2', {}, 'Связки между источниками (LEFT JOIN)'),
+        el('h2', {}, 'Связки между источниками'),
         el('div', { class: 'joins' }, preset.view.joins.map(joinRow)),
-        el('button', { class: 'link', onclick: function () { d({ type: 'preset/addJoin' }); } }, '+ связка')
+        el('button', { class: 'link', onclick: function () { d({ type: 'preset/addJoin' }); } }, '+ связка'),
+        el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
+          'тип связки определяет, какие строки остаются без пары: левое — все строки левого '
+          + 'источника, правое — все строки правого, внутреннее — только совпавшие, полное — все')
       ) : null,
 
       pickedColumns.length ? el('div', {},
