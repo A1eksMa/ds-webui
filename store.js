@@ -358,11 +358,24 @@
       case 'ui/setExportFormat':
         return Object.assign({}, state, { exportFormat: a.value });
 
-      case 'export/toggle':
-        return Object.assign({}, state, { exportOpen: !state.exportOpen });
+      // «Экспорт» и «Расширенный фильтр» — взаимоисключающие области над
+      // таблицей: открытие одной закрывает другую (закрытие — само по себе,
+      // вторую область не трогает, она и так уже закрыта по инварианту).
+      case 'export/toggle': {
+        var openingExport = !state.exportOpen;
+        return Object.assign({}, state, {
+          exportOpen: openingExport,
+          advOpen: openingExport ? false : state.advOpen
+        });
+      }
 
-      case 'adv/toggle':
-        return Object.assign({}, state, { advOpen: !state.advOpen });
+      case 'adv/toggle': {
+        var openingAdv = !state.advOpen;
+        return Object.assign({}, state, {
+          advOpen: openingAdv,
+          exportOpen: openingAdv ? false : state.exportOpen
+        });
+      }
 
       case 'adv/add':
         return Object.assign({}, state, {

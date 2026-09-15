@@ -88,3 +88,27 @@ test('preset/setAsOf: нераспознанный ввод не меняет п
   const next = App.reducer(withValue, { type: 'preset/setAsOf', value: 'не дата' });
   assert.equal(next.preset.query.as_of, 1706745600);
 });
+
+// «Экспорт» и «Расширенный фильтр» — взаимоисключающие области над таблицей
+test('export/toggle: открытие экспорта закрывает уже открытый расширенный фильтр', () => {
+  const withFilter = App.reducer(App.initialState, { type: 'adv/toggle' });
+  assert.equal(withFilter.advOpen, true);
+  const next = App.reducer(withFilter, { type: 'export/toggle' });
+  assert.equal(next.exportOpen, true);
+  assert.equal(next.advOpen, false, 'открытие экспорта должно закрыть фильтр');
+});
+
+test('adv/toggle: открытие расширенного фильтра закрывает уже открытый экспорт', () => {
+  const withExport = App.reducer(App.initialState, { type: 'export/toggle' });
+  assert.equal(withExport.exportOpen, true);
+  const next = App.reducer(withExport, { type: 'adv/toggle' });
+  assert.equal(next.advOpen, true);
+  assert.equal(next.exportOpen, false, 'открытие фильтра должно закрыть экспорт');
+});
+
+test('export/toggle: закрытие экспорта не трогает (уже закрытый) фильтр', () => {
+  const opened = App.reducer(App.initialState, { type: 'export/toggle' });
+  const closed = App.reducer(opened, { type: 'export/toggle' });
+  assert.equal(closed.exportOpen, false);
+  assert.equal(closed.advOpen, false);
+});
