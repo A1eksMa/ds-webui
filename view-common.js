@@ -138,7 +138,7 @@
           }, 'К настройкам →')
         ];
     return el('header', { class: 'nav' },
-      el('strong', {}, 'Data Sources — Web UI'),
+      el('strong', {}, 'План v4.20'),
       el('span', { class: 'spacer' }),
       menu
     );
