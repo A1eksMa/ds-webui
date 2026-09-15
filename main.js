@@ -135,16 +135,17 @@
   // когда датасет уже построен) пресет/срез/строки-после-фильтров/колонки —
   // раньше это были две отдельные строки в разных местах страницы
   var footerText = function (state) {
-    var parts = [state.dataDir ? ('данные: ' + state.dataDir + '/') : 'нет data/ и sample-data/'];
+    var parts = [state.dataDir ? ('Путь: ' + state.dataDir) : 'Путь: не найден (нет ни data, ни sample-data)'];
     if (state.route === 'table' && state.dataset) {
       var cols = visibleColumns(state.dataset, state.hideEmpty);
       var afterAdv = applyAdvanced(state.dataset, state.adv);
       var shownRows = applyFilters(afterAdv, state.tableFilters).rows.length;
       parts.push(
-        'Пресет «' + state.preset.name + '», источники: ' + selectedNames(state.preset).join(' + ')
-        + ' · срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент')
-        + ' · строк: ' + shownRows + ' из ' + state.dataset.rows.length
-        + ' · колонок: ' + cols.length
+        'Пресет: ' + state.preset.name,
+        'Источники: ' + selectedNames(state.preset).join(' + '),
+        'Срез: ' + (state.dataset.as_of != null ? fmtDate(state.dataset.as_of) : 'текущий момент'),
+        'Строк: ' + shownRows + ' из ' + state.dataset.rows.length,
+        'Столбцов: ' + cols.length
       );
     }
     return parts.join(' · ');
