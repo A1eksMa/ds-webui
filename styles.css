@@ -70,7 +70,7 @@ h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transfor
 .tab:disabled { opacity: .4; cursor: not-allowed; }
 .gear { border-radius: 6px; padding: .35rem .7rem; }
 /* контур+текст акцентным цветом — иначе сливаются с фоном (border/head-bg почти как bg) */
-.nav .gear, .toolbar > button {
+.nav .gear {
   border-color: var(--accent); color: var(--accent); background: var(--bg);
 }
 
@@ -169,22 +169,13 @@ input[type=text], select {
 }
 .cond-list-tools { display: flex; align-items: center; gap: .6rem; font-size: .85em; }
 
-/* table: расширенный фильтр (панель над таблицей) */
-.advfilter { margin: .5rem 0; }
-.advfilter:empty { margin: 0; }
-.advfilter-panel {
-  border: 1px solid var(--border); border-radius: 8px;
-  background: var(--head-bg); padding: .6rem .75rem;
-}
-.advfilter-head { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; margin-bottom: .5rem; }
-.advfilter-head .spacer { flex: 1; }
+/* «Расширенный фильтр» — отдельная страница (не оверлей-панель над таблицей,
+   как было раньше), поэтому своего фона/рамки не требует — как и «Настройки» */
 .advfilter-foot { display: flex; align-items: center; gap: 1rem; margin-top: .35rem; }
 .adv-conj { min-width: 4rem; }
 .adv-conj-spacer { display: inline-block; width: 4rem; }
 
 /* table: сортировка по клику на заголовок */
-/* «включено» — заливка, чтобы отличаться от обычного контурного .gear (см. выше) */
-.nav .gear.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 table.data .col-name {
   cursor: pointer; user-select: none;
   /* align-items:flex-start, не baseline — раньше заголовок был однострочный,
@@ -254,7 +245,7 @@ table.data thead th {
   /* top:0 относительно .scroll (теперь это осознанный, ограниченный по высоте
      скролл-контейнер — см. .scroll выше), а не относительно окна страницы */
   position: sticky; top: 0; z-index: 2;
-  /* та же акцентная цветовая схема, что у кнопок (.gear/.toolbar>button) — фон с
+  /* та же акцентная цветовая схема, что у кнопок (.nav .gear) — фон с
      лёгким акцентным оттенком + акцентная нижняя граница вместо обычной серой;
      цвет текста не трогаем — иначе потеряется акцентная подсветка hover/sorted */
   background: color-mix(in srgb, var(--accent) 12%, var(--head-bg));

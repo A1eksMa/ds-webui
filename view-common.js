@@ -2,9 +2,10 @@
 
 // Общие DOM-контролы, используемые и «Конструктором», и «Таблицей»: селект
 // оператора условия, контрол значения условия (включая вставку списка из
-// буфера обмена), шапка навигации. DOM-зависимый код — не тестируется под
-// node:test. Зависит от util.js (el), effects.js (pasteFromClipboard),
-// dataset.js (OP_LIST/OP_NO_VALUE/OPERATORS/parseList).
+// буфера обмена), шапка навигации (главное меню — Настройки/Расширенный
+// фильтр/Экспорт) и обёртка строки состояния внизу окна. DOM-зависимый код —
+// не тестируется под node:test. Зависит от util.js (el), effects.js
+// (pasteFromClipboard), dataset.js (OP_LIST/OP_NO_VALUE/OPERATORS/parseList).
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(require('./util.js'), require('./effects.js'), require('./dataset.js'));
@@ -57,28 +58,37 @@
     });
   };
 
+  // Главное меню — три равнозначные кнопки (Настройки/Фильтр/Экспорт), каждая
+  // открывает свою полноэкранную страницу (как «Настройки» открывали и
+  // раньше); единый стиль (.gear) — они формируют один интерфейс перехода ко
+  // всему функционалу. На любой не-«Таблица» странице меню сворачивается в
+  // одну кнопку «← К таблице» (симметрично тому, как это уже работало у
+  // «Настройки» — просто теперь то же правило применено ко всем трём).
   var viewNav = function (state, d) {
-    var ctl = state.route === 'table'
-      ? el('button', {
-          class: 'gear', title: 'Настройки: изменить пресет по умолчанию',
-          onclick: function () { d({ type: 'route/set', route: 'build' }); }
-        }, '⚙ Настройки')
+    var menu = state.route === 'table'
+      ? [
+          el('button', {
+            class: 'gear', title: 'Настройки: изменить пресет по умолчанию',
+            onclick: function () { d({ type: 'route/set', route: 'build' }); }
+          }, '⚙ Настройки'),
+          el('button', {
+            class: 'gear', disabled: !state.dataset,
+            title: 'Расширенный фильтр и сортировка: временные, поверх выборки, не сохраняются',
+            onclick: function () { d({ type: 'route/set', route: 'filter' }); }
+          }, 'Расширенный фильтр'),
+          el('button', {
+            class: 'gear', disabled: !state.dataset,
+            onclick: function () { d({ type: 'route/set', route: 'export' }); }
+          }, 'Экспорт')
+        ]
       : el('button', {
           class: 'gear', disabled: !state.dataset,
           onclick: function () { d({ type: 'route/set', route: 'table' }); }
         }, '← К таблице');
-    var advBtn = state.route === 'table'
-      ? el('button', {
-          class: 'gear' + (state.advOpen ? ' on' : ''),
-          title: 'Расширенный фильтр: временные условия поверх выборки (не сохраняются)',
-          onclick: function () { d({ type: 'adv/toggle' }); }
-        }, 'Расширенный фильтр ' + (state.advOpen ? '▾' : '▸'))
-      : null;
     return el('header', { class: 'nav' },
       el('strong', {}, 'Data Sources — Web UI'),
       el('span', { class: 'spacer' }),
-      advBtn,
-      ctl
+      menu
     );
   };
 
