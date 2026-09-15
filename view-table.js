@@ -46,18 +46,7 @@
   };
 
   var viewTableShell = function (state, d) {
-    var toolbar = el('div', { class: 'toolbar' },
-      el('label', { class: 'chk', title: 'вынести таблицу за пределы колонки контента — во всю ширину окна браузера' },
-        el('input', {
-          type: 'checkbox', checked: state.wideTable,
-          onchange: function (e) { d({ type: 'ui/setWideTable', value: e.target.checked }); }
-        }),
-        'во всю ширину окна'
-      )
-    );
-
     return el('section', { class: 'page table' },
-      el('div', { class: 'table-headbar' }, state.dataset ? toolbar : null),
       el('div', { class: 'grid-wrap', id: 'grid' })
     );
   };

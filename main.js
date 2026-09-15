@@ -198,13 +198,10 @@
       root.replaceChild(viewExport(state, d), root.children[1]);
     }
 
-    document.body.classList.toggle('grid-wide', !!state.wideTable && state.route === 'table');
-
     if (state.route === 'table') {
       renderGrid(state, d);
     }
     if (state.preset) storage.set('preset', state.preset);
-    storage.set('wideTable', state.wideTable);
   };
 
   store.subscribe(render);
@@ -219,7 +216,6 @@
     // читаем сохранённое ДО первого полноценного render — иначе он перезапишет
     // ключи текущим (ещё дефолтным) состоянием
     var saved = storage.get('preset');
-    var savedWide = storage.get('wideTable') === true;
 
     store.dispatch({
       type: 'manifest/loaded',
@@ -227,7 +223,6 @@
       dataDir: boot ? boot.dataDir : null
     });
     store.dispatch({ type: 'preset/set', preset: saved || basePreset() });
-    store.dispatch({ type: 'ui/setWideTable', value: savedWide });
     // применить пресет по умолчанию и сразу открыть таблицу; при ошибке
     // (нет данных / нет источника) buildDataset оставит пользователя в конструкторе
     buildDataset(store);

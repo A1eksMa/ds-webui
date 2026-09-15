@@ -39,7 +39,11 @@ body {
   color: var(--fg);
   background: var(--bg);
 }
-.app { max-width: 1200px; margin: 0 auto; padding: 0 1rem 3rem; }
+/* без max-width/margin:auto — информационное приложение, ценен объём полезной
+   информации на экране, а не эстетика узкой центрированной колонки. Раньше
+   был режим "во всю ширину окна" только для таблицы (галочка) — теперь это
+   единственный режим, и для всех страниц сразу, единообразно. */
+.app { padding: 0 1rem 3rem; }
 h1 { font-size: 1.3rem; margin: 1rem 0 .5rem; }
 h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .muted { color: var(--muted); }
@@ -200,8 +204,6 @@ table.data th .col-resizer:hover { background: var(--accent); opacity: .4; }
 body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
 
 /* table */
-.toolbar { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: .5rem 0; }
-.toolbar .spacer { flex: 1; }
 .grp-actions { margin: .3rem 0; display: flex; gap: .3rem; }
 /* .scroll — осознанно ограниченная по высоте область (как замороженные области
    в Excel): скроллится сама, и по горизонтали, и по вертикали. Раньше пытались
@@ -214,19 +216,6 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
    — стандартная, надёжная схема, не полагающаяся на то, что .scroll НЕ должен
    быть скролл-контейнером. */
 .scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: 8px; }
-/* «во всю ширину окна»: грид вырывается из колонки контента (.app max-width),
-   оставляя по 1rem зазора с краями окна; остальная страница не трогается */
-body.grid-wide .scroll {
-  margin-left: calc(50% - 50vw + 1rem);
-  margin-right: calc(50% - 50vw + 1rem);
-}
-/* та же логика для шапки над таблицей (тулбар+фильтр) — иначе при широком
-   окне (два монитора) она остаётся по центру колонки .app, т.е. на стыке
-   мониторов, а не рядом с самой (уже широкой) таблицей. */
-body.grid-wide .table-headbar {
-  margin-left: calc(50% - 50vw + 1rem);
-  margin-right: calc(50% - 50vw + 1rem);
-}
 table.data {
   /* separate, не collapse — иначе при collapse граница между ячейками рисуется
      РОВНО на стыке строк (наполовину заходя на соседнюю), и акцентная 2px-граница

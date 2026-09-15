@@ -136,7 +136,6 @@
     entOpen: true,            // конструктор: развёрнут ли блок «Сущности»
     adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
     sort: null,              // { col, dir: 'asc'|'desc' } | null — сортировка столбца
-    wideTable: false,        // «Таблица» во всю ширину окна (localStorage, не в пресете)
     exportFormat: 'xls'      // выбор формата на странице «Экспорт» ('xls' | 'csv')
   };
 
@@ -154,9 +153,6 @@
 
       case 'preset/setName':
         return setIn(state, ['preset', 'name'], String(a.value == null ? '' : a.value));
-
-      case 'ui/setWideTable':
-        return Object.assign({}, state, { wideTable: !!a.value });
 
       case 'preset/toggleSource': {
         var sources = state.preset.query.sources;
