@@ -46,13 +46,6 @@
   var viewTableShell = function (state, d) {
     var cols = state.dataset ? state.dataset.columns : [];
     var toolbar = el('div', { class: 'toolbar' },
-      el('label', { class: 'chk' },
-        el('input', {
-          type: 'checkbox', checked: state.hideEmpty,
-          onchange: function () { d({ type: 'table/toggleHideEmpty' }); }
-        }),
-        'скрыть пустые колонки'
-      ),
       el('label', { class: 'chk', title: 'вынести таблицу за пределы колонки контента — во всю ширину окна браузера' },
         el('input', {
           type: 'checkbox', checked: state.wideTable,
@@ -123,15 +116,11 @@
 
     node.appendChild(el('div', { class: 'advfilter-panel' },
       el('div', { class: 'advfilter-head' },
-        el('strong', {}, 'Расширенный фильтр'),
-        el('span', { class: 'muted' }, ' — поверх настроек, до быстрых; не входит в пресет'),
         el('span', { class: 'spacer' }),
         el('button', { class: 'link', onclick: function () { d({ type: 'adv/toggle' }); } }, 'Скрыть')
       ),
-      el('h2', { style: 'margin:.6rem 0 .3rem' }, 'Условия'),
-      state.adv.length
-        ? el('div', { class: 'conditions' }, state.adv.map(advRow))
-        : el('p', { class: 'muted', style: 'margin:.2rem 0' }, 'условий нет — выборка как из «Конструктора»'),
+      el('h2', { style: 'margin:.6rem 0 .3rem' }, 'Установить фильтр'),
+      state.adv.length ? el('div', { class: 'conditions' }, state.adv.map(advRow)) : null,
       el('div', { class: 'advfilter-foot' },
         el('button', { class: 'link', onclick: function () { d({ type: 'adv/add' }); } }, '+ условие'),
         el('button', {
@@ -140,14 +129,19 @@
         }, 'сбросить условия'),
         el('span', { class: 'muted' }, 'показано ' + shown + ' из ' + state.dataset.rows.length)
       ),
-      el('h2', { style: 'margin:.8rem 0 .3rem' }, 'Группировка'),
-      el('p', { class: 'muted', style: 'margin:.2rem 0' },
-        'уровни применяются по порядку сверху вниз (вложенно): сначала группируем по первому полю, внутри каждой группы — по второму, и так далее'),
-      state.groupBy.length
-        ? el('div', { class: 'conditions' }, state.groupBy.map(groupRow))
-        : el('p', { class: 'muted', style: 'margin:.2rem 0' }, 'группировки нет — строки таблицы плоским списком'),
+      el('h2', { style: 'margin:.8rem 0 .3rem' }, 'Отсортировать'),
+      state.groupBy.length ? el('div', { class: 'conditions' }, state.groupBy.map(groupRow)) : null,
       el('div', { class: 'advfilter-foot' },
         el('button', { class: 'link', onclick: function () { d({ type: 'group/add' }); } }, '+ уровень группировки')
+      ),
+      el('div', { class: 'advfilter-foot' },
+        el('label', { class: 'chk' },
+          el('input', {
+            type: 'checkbox', checked: state.hideEmpty,
+            onchange: function () { d({ type: 'table/toggleHideEmpty' }); }
+          }),
+          'скрыть пустые колонки'
+        )
       )
     ));
   };
