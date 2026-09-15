@@ -138,9 +138,9 @@
 
       el('div', { class: 'actions' },
         el('button', {
-          disabled: !state.adv.length,
+          class: 'primary', disabled: !state.adv.length,
           onclick: function () { d({ type: 'adv/reset' }); }
-        }, 'Сбросить условия')
+        }, 'Показать все')
       )
     ));
   };
