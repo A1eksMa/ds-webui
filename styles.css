@@ -33,8 +33,13 @@
 }
 
 * { box-sizing: border-box; }
+/* flex-колонка на всю высоту вьюпорта — нужно, чтобы .scroll (таблица) мог
+   растянуться на ВСЮ реально свободную высоту (см. .grid-wrap/.scroll ниже),
+   а не гадать в vh: после того как убрали переключатель ширины, страница
+   без этого просто заканчивалась по высоте контента, оставляя пустое место
+   снизу до fixed-строки состояния. */
 body {
-  margin: 0;
+  margin: 0; min-height: 100vh; display: flex; flex-direction: column;
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--fg);
   background: var(--bg);
@@ -43,7 +48,10 @@ body {
    информации на экране, а не эстетика узкой центрированной колонки. Раньше
    был режим "во всю ширину окна" только для таблицы (галочка) — теперь это
    единственный режим, и для всех страниц сразу, единообразно. */
-.app { padding: 0 1rem 3rem; }
+.app {
+  padding: 0 1rem 3rem; flex: 1 1 auto; min-height: 0;
+  display: flex; flex-direction: column;
+}
 h1 { font-size: 1.3rem; margin: 1rem 0 .5rem; }
 h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
 .muted { color: var(--muted); }
@@ -53,6 +61,7 @@ h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transfor
 /* nav */
 .nav {
   display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  flex: none;   /* не сжимать/растягивать как flex-элемент .app — своя высота по контенту */
   padding: .6rem 0; margin-bottom: .5rem;
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 5;
@@ -203,11 +212,24 @@ table.data th .col-resizer {
 table.data th .col-resizer:hover { background: var(--accent); opacity: .4; }
 body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-select: none !important; }
 
+/* .page — растягивается на весь остаток высоты .app (flex-колонка, см. выше);
+   для build/filter/export это просто резерв места (короче контента — снизу
+   пустая зона, длиннее — страница скроллится как обычно, ничего не ломается).
+   .page.table идёт дальше: сама становится flex-колонкой, чтобы .grid-wrap /
+   .scroll могли унаследовать эту высоту и заполнить её целиком. */
+.page { flex: 1 1 auto; min-height: 0; }
+.page.table { display: flex; flex-direction: column; }
+.grid-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
 /* table */
-.grp-actions { margin: .3rem 0; display: flex; gap: .3rem; }
+.grp-actions { margin: .3rem 0; display: flex; gap: .3rem; flex: none; }
 /* .scroll — осознанно ограниченная по высоте область (как замороженные области
-   в Excel): скроллится сама, и по горизонтали, и по вертикали. Раньше пытались
-   держать .scroll БЕЗ ограничения высоты (overflow-x:auto, оставляя вертикаль
+   в Excel): скроллится сама, и по горизонтали, и по вертикали. flex:1 (а не
+   фиксированный max-height:70vh, как было) — тянется на ВСЮ реально
+   свободную высоту .grid-wrap, а не на угаданную долю экрана: иначе на
+   высоких окнах / коротких таблицах под ней оставалось пустое место, а на
+   низких — 70vh могло быть даже больше доступного. Раньше пытались держать
+   .scroll БЕЗ ограничения высоты (overflow-x:auto, оставляя вертикаль
    "visible"/"clip"), чтобы sticky-шапка прилипала к окну страницы — но в обоих
    протестированных браузерах (Firefox, Chromium) шапка всё равно прилипала
    относительно .scroll со сдвигом на --nav-h, наезжая на первые строки данных
@@ -215,7 +237,7 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
    для sticky, делаем это осознанно и переносим отсчёт на 0 (см. thead th ниже)
    — стандартная, надёжная схема, не полагающаяся на то, что .scroll НЕ должен
    быть скролл-контейнером. */
-.scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: 8px; }
+.scroll { overflow: auto; flex: 1 1 auto; min-height: 0; border: 1px solid var(--border); border-radius: 8px; }
 table.data {
   /* separate, не collapse — иначе при collapse граница между ячейками рисуется
      РОВНО на стыке строк (наполовину заходя на соседнюю), и акцентная 2px-граница
