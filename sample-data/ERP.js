@@ -7,9 +7,9 @@ window.DS.sources["ERP"] = {
     "key": "client_ref",
     "as_of": 1706745600.0,
     "generated_at": 1706750000.0,
-    "gen_max_cnt": 19,
+    "gen_max_cnt": 269,
     "include_archive": false,
-    "rows": 3,
+    "rows": 53,
     "labels": [
       "price",
       "stock"
@@ -25,6 +25,256 @@ window.DS.sources["ERP"] = {
       "client_ref": "102",
       "price": "95.00",
       "stock": null
+    },
+    {
+      "client_ref": "106",
+      "price": "16.00",
+      "stock": "206"
+    },
+    {
+      "client_ref": "107",
+      "price": "17.00",
+      "stock": "207"
+    },
+    {
+      "client_ref": "108",
+      "price": "18.00",
+      "stock": "208"
+    },
+    {
+      "client_ref": "109",
+      "price": "19.00",
+      "stock": "209"
+    },
+    {
+      "client_ref": "110",
+      "price": "20.00",
+      "stock": "210"
+    },
+    {
+      "client_ref": "111",
+      "price": "21.00",
+      "stock": "211"
+    },
+    {
+      "client_ref": "112",
+      "price": "22.00",
+      "stock": "212"
+    },
+    {
+      "client_ref": "113",
+      "price": "23.00",
+      "stock": "213"
+    },
+    {
+      "client_ref": "114",
+      "price": "24.00",
+      "stock": "214"
+    },
+    {
+      "client_ref": "115",
+      "price": "25.00",
+      "stock": "215"
+    },
+    {
+      "client_ref": "116",
+      "price": "26.00",
+      "stock": "216"
+    },
+    {
+      "client_ref": "117",
+      "price": "27.00",
+      "stock": "217"
+    },
+    {
+      "client_ref": "118",
+      "price": "28.00",
+      "stock": "218"
+    },
+    {
+      "client_ref": "119",
+      "price": "29.00",
+      "stock": "219"
+    },
+    {
+      "client_ref": "120",
+      "price": "30.00",
+      "stock": "220"
+    },
+    {
+      "client_ref": "121",
+      "price": "31.00",
+      "stock": "221"
+    },
+    {
+      "client_ref": "122",
+      "price": "32.00",
+      "stock": "222"
+    },
+    {
+      "client_ref": "123",
+      "price": "33.00",
+      "stock": "223"
+    },
+    {
+      "client_ref": "124",
+      "price": "34.00",
+      "stock": "224"
+    },
+    {
+      "client_ref": "125",
+      "price": "35.00",
+      "stock": "225"
+    },
+    {
+      "client_ref": "126",
+      "price": "36.00",
+      "stock": "226"
+    },
+    {
+      "client_ref": "127",
+      "price": "37.00",
+      "stock": "227"
+    },
+    {
+      "client_ref": "128",
+      "price": "38.00",
+      "stock": "228"
+    },
+    {
+      "client_ref": "129",
+      "price": "39.00",
+      "stock": "229"
+    },
+    {
+      "client_ref": "130",
+      "price": "40.00",
+      "stock": "230"
+    },
+    {
+      "client_ref": "131",
+      "price": "41.00",
+      "stock": "231"
+    },
+    {
+      "client_ref": "132",
+      "price": "42.00",
+      "stock": "232"
+    },
+    {
+      "client_ref": "133",
+      "price": "43.00",
+      "stock": "233"
+    },
+    {
+      "client_ref": "134",
+      "price": "44.00",
+      "stock": "234"
+    },
+    {
+      "client_ref": "135",
+      "price": "45.00",
+      "stock": "235"
+    },
+    {
+      "client_ref": "136",
+      "price": "46.00",
+      "stock": "236"
+    },
+    {
+      "client_ref": "137",
+      "price": "47.00",
+      "stock": "237"
+    },
+    {
+      "client_ref": "138",
+      "price": "48.00",
+      "stock": "238"
+    },
+    {
+      "client_ref": "139",
+      "price": "49.00",
+      "stock": "239"
+    },
+    {
+      "client_ref": "140",
+      "price": "50.00",
+      "stock": "240"
+    },
+    {
+      "client_ref": "141",
+      "price": "51.00",
+      "stock": "241"
+    },
+    {
+      "client_ref": "142",
+      "price": "52.00",
+      "stock": "242"
+    },
+    {
+      "client_ref": "143",
+      "price": "53.00",
+      "stock": "243"
+    },
+    {
+      "client_ref": "144",
+      "price": "54.00",
+      "stock": "244"
+    },
+    {
+      "client_ref": "145",
+      "price": "55.00",
+      "stock": "245"
+    },
+    {
+      "client_ref": "146",
+      "price": "56.00",
+      "stock": "246"
+    },
+    {
+      "client_ref": "147",
+      "price": "57.00",
+      "stock": "247"
+    },
+    {
+      "client_ref": "148",
+      "price": "58.00",
+      "stock": "248"
+    },
+    {
+      "client_ref": "149",
+      "price": "59.00",
+      "stock": "249"
+    },
+    {
+      "client_ref": "150",
+      "price": "10.00",
+      "stock": "250"
+    },
+    {
+      "client_ref": "151",
+      "price": "11.00",
+      "stock": "251"
+    },
+    {
+      "client_ref": "152",
+      "price": "12.00",
+      "stock": "252"
+    },
+    {
+      "client_ref": "153",
+      "price": "13.00",
+      "stock": "253"
+    },
+    {
+      "client_ref": "154",
+      "price": "14.00",
+      "stock": "254"
+    },
+    {
+      "client_ref": "155",
+      "price": "15.00",
+      "stock": "255"
     },
     {
       "client_ref": "999",

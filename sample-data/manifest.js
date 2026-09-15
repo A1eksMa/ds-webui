@@ -3,7 +3,7 @@
 // db_max_cnt per source to decide whether a file needs regenerating.
 window.DS_MANIFEST = {
   "generated_at": 1706750000.0,
-  "db_max_cnt": 21,
+  "db_max_cnt": 271,
   "sources": [
     {
       "name": "CRM",
@@ -11,9 +11,9 @@ window.DS_MANIFEST = {
       "key": "customer_id",
       "as_of": 1706745600.0,
       "generated_at": 1706750000.0,
-      "gen_max_cnt": 13,
-      "db_max_cnt": 21,
-      "rows": 4,
+      "gen_max_cnt": 169,
+      "db_max_cnt": 271,
+      "rows": 54,
       "labels": [
         "email",
         "phone",
@@ -26,9 +26,9 @@ window.DS_MANIFEST = {
       "key": "client_ref",
       "as_of": 1706745600.0,
       "generated_at": 1706750000.0,
-      "gen_max_cnt": 19,
-      "db_max_cnt": 19,
-      "rows": 3,
+      "gen_max_cnt": 269,
+      "db_max_cnt": 269,
+      "rows": 53,
       "labels": [
         "price",
         "stock"

@@ -7,9 +7,9 @@ window.DS.sources["CRM"] = {
     "key": "customer_id",
     "as_of": 1706745600.0,
     "generated_at": 1706750000.0,
-    "gen_max_cnt": 13,
+    "gen_max_cnt": 169,
     "include_archive": false,
-    "rows": 4,
+    "rows": 54,
     "labels": [
       "email",
       "phone",
@@ -38,6 +38,306 @@ window.DS.sources["CRM"] = {
     {
       "customer_id": "104",
       "email": "dave@example.com",
+      "status": "active"
+    },
+    {
+      "customer_id": "106",
+      "email": "user106@example.com",
+      "phone": "+7-900-000-0106",
+      "status": "active"
+    },
+    {
+      "customer_id": "107",
+      "email": "user107@example.com",
+      "phone": "+7-900-000-0107",
+      "status": "active"
+    },
+    {
+      "customer_id": "108",
+      "email": "user108@example.com",
+      "phone": "+7-900-000-0108",
+      "status": "active"
+    },
+    {
+      "customer_id": "109",
+      "email": "user109@example.com",
+      "phone": "+7-900-000-0109",
+      "status": "active"
+    },
+    {
+      "customer_id": "110",
+      "email": "user110@example.com",
+      "phone": "+7-900-000-0110",
+      "status": "active"
+    },
+    {
+      "customer_id": "111",
+      "email": "user111@example.com",
+      "phone": "+7-900-000-0111",
+      "status": "active"
+    },
+    {
+      "customer_id": "112",
+      "email": "user112@example.com",
+      "phone": "+7-900-000-0112",
+      "status": "active"
+    },
+    {
+      "customer_id": "113",
+      "email": "user113@example.com",
+      "phone": "+7-900-000-0113",
+      "status": "active"
+    },
+    {
+      "customer_id": "114",
+      "email": "user114@example.com",
+      "phone": "+7-900-000-0114",
+      "status": "active"
+    },
+    {
+      "customer_id": "115",
+      "email": "user115@example.com",
+      "phone": "+7-900-000-0115",
+      "status": "active"
+    },
+    {
+      "customer_id": "116",
+      "email": "user116@example.com",
+      "phone": "+7-900-000-0116",
+      "status": "active"
+    },
+    {
+      "customer_id": "117",
+      "email": "user117@example.com",
+      "phone": "+7-900-000-0117",
+      "status": "active"
+    },
+    {
+      "customer_id": "118",
+      "email": "user118@example.com",
+      "phone": "+7-900-000-0118",
+      "status": "active"
+    },
+    {
+      "customer_id": "119",
+      "email": "user119@example.com",
+      "phone": "+7-900-000-0119",
+      "status": "active"
+    },
+    {
+      "customer_id": "120",
+      "email": "user120@example.com",
+      "phone": "+7-900-000-0120",
+      "status": "active"
+    },
+    {
+      "customer_id": "121",
+      "email": "user121@example.com",
+      "phone": "+7-900-000-0121",
+      "status": "active"
+    },
+    {
+      "customer_id": "122",
+      "email": "user122@example.com",
+      "phone": "+7-900-000-0122",
+      "status": "active"
+    },
+    {
+      "customer_id": "123",
+      "email": "user123@example.com",
+      "phone": "+7-900-000-0123",
+      "status": "active"
+    },
+    {
+      "customer_id": "124",
+      "email": "user124@example.com",
+      "phone": "+7-900-000-0124",
+      "status": "active"
+    },
+    {
+      "customer_id": "125",
+      "email": "user125@example.com",
+      "phone": "+7-900-000-0125",
+      "status": "active"
+    },
+    {
+      "customer_id": "126",
+      "email": "user126@example.com",
+      "phone": "+7-900-000-0126",
+      "status": "active"
+    },
+    {
+      "customer_id": "127",
+      "email": "user127@example.com",
+      "phone": "+7-900-000-0127",
+      "status": "active"
+    },
+    {
+      "customer_id": "128",
+      "email": "user128@example.com",
+      "phone": "+7-900-000-0128",
+      "status": "active"
+    },
+    {
+      "customer_id": "129",
+      "email": "user129@example.com",
+      "phone": "+7-900-000-0129",
+      "status": "active"
+    },
+    {
+      "customer_id": "130",
+      "email": "user130@example.com",
+      "phone": "+7-900-000-0130",
+      "status": "active"
+    },
+    {
+      "customer_id": "131",
+      "email": "user131@example.com",
+      "phone": "+7-900-000-0131",
+      "status": "active"
+    },
+    {
+      "customer_id": "132",
+      "email": "user132@example.com",
+      "phone": "+7-900-000-0132",
+      "status": "active"
+    },
+    {
+      "customer_id": "133",
+      "email": "user133@example.com",
+      "phone": "+7-900-000-0133",
+      "status": "active"
+    },
+    {
+      "customer_id": "134",
+      "email": "user134@example.com",
+      "phone": "+7-900-000-0134",
+      "status": "active"
+    },
+    {
+      "customer_id": "135",
+      "email": "user135@example.com",
+      "phone": "+7-900-000-0135",
+      "status": "active"
+    },
+    {
+      "customer_id": "136",
+      "email": "user136@example.com",
+      "phone": "+7-900-000-0136",
+      "status": "active"
+    },
+    {
+      "customer_id": "137",
+      "email": "user137@example.com",
+      "phone": "+7-900-000-0137",
+      "status": "active"
+    },
+    {
+      "customer_id": "138",
+      "email": "user138@example.com",
+      "phone": "+7-900-000-0138",
+      "status": "active"
+    },
+    {
+      "customer_id": "139",
+      "email": "user139@example.com",
+      "phone": "+7-900-000-0139",
+      "status": "active"
+    },
+    {
+      "customer_id": "140",
+      "email": "user140@example.com",
+      "phone": "+7-900-000-0140",
+      "status": "active"
+    },
+    {
+      "customer_id": "141",
+      "email": "user141@example.com",
+      "phone": "+7-900-000-0141",
+      "status": "active"
+    },
+    {
+      "customer_id": "142",
+      "email": "user142@example.com",
+      "phone": "+7-900-000-0142",
+      "status": "active"
+    },
+    {
+      "customer_id": "143",
+      "email": "user143@example.com",
+      "phone": "+7-900-000-0143",
+      "status": "active"
+    },
+    {
+      "customer_id": "144",
+      "email": "user144@example.com",
+      "phone": "+7-900-000-0144",
+      "status": "active"
+    },
+    {
+      "customer_id": "145",
+      "email": "user145@example.com",
+      "phone": "+7-900-000-0145",
+      "status": "active"
+    },
+    {
+      "customer_id": "146",
+      "email": "user146@example.com",
+      "phone": "+7-900-000-0146",
+      "status": "active"
+    },
+    {
+      "customer_id": "147",
+      "email": "user147@example.com",
+      "phone": "+7-900-000-0147",
+      "status": "active"
+    },
+    {
+      "customer_id": "148",
+      "email": "user148@example.com",
+      "phone": "+7-900-000-0148",
+      "status": "active"
+    },
+    {
+      "customer_id": "149",
+      "email": "user149@example.com",
+      "phone": "+7-900-000-0149",
+      "status": "active"
+    },
+    {
+      "customer_id": "150",
+      "email": "user150@example.com",
+      "phone": "+7-900-000-0150",
+      "status": "active"
+    },
+    {
+      "customer_id": "151",
+      "email": "user151@example.com",
+      "phone": "+7-900-000-0151",
+      "status": "active"
+    },
+    {
+      "customer_id": "152",
+      "email": "user152@example.com",
+      "phone": "+7-900-000-0152",
+      "status": "active"
+    },
+    {
+      "customer_id": "153",
+      "email": "user153@example.com",
+      "phone": "+7-900-000-0153",
+      "status": "active"
+    },
+    {
+      "customer_id": "154",
+      "email": "user154@example.com",
+      "phone": "+7-900-000-0154",
+      "status": "active"
+    },
+    {
+      "customer_id": "155",
+      "email": "user155@example.com",
+      "phone": "+7-900-000-0155",
       "status": "active"
     }
   ]

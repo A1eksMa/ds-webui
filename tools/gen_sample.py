@@ -106,6 +106,23 @@ ds("load", str(erp), str(batch({
     "stock": ["150", None, "5"],
 })), "--dt", "1705000000")
 
+# --- филлер: полсотни обычных клиентов, всё matched — только чтобы в таблице
+# было заметно больше строк (~2-3 экрана), удобно тестировать скролл/sticky-
+# шапку. Не трогает истории 101-105 выше (POST/DELETE/пропуск ключа/staleness —
+# см. sample-data/README.md) и до `ds get`, так что не устаревшие. -----------
+_extra_ids = [str(i) for i in range(106, 156)]
+ds("load", str(crm), str(batch({
+    "customer_id": _extra_ids,
+    "email": ["user%d@example.com" % i for i in range(106, 156)],
+    "phone": ["+7-900-000-%04d" % i for i in range(106, 156)],
+    "status": ["active"] * len(_extra_ids),
+})), "--dt", "1704067200")
+ds("load", str(erp), str(batch({
+    "client_ref": _extra_ids,
+    "price": ["%d.00" % (10 + (i % 50)) for i in range(106, 156)],
+    "stock": [str(100 + i) for i in range(106, 156)],
+})), "--dt", "1705000000")
+
 # --- the read the poller ships to the browser --------------------------------
 gen_dir = work / "out"
 ds("get", "--out", str(gen_dir), "--dt", str(AS_OF))
