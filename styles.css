@@ -206,14 +206,17 @@ body.col-resizing, body.col-resizing * { cursor: col-resize !important; user-sel
 .toolbar .spacer { flex: 1; }
 .grp-actions { margin: .3rem 0; display: flex; gap: .3rem; }
 .count { margin: .3rem 0; }
-/* overflow-y: clip — иначе браузер сам "продвигает" overflow-y в auto (правило: у
-   overflow-x непустое значение + overflow-y "visible" по умолчанию -> visible
-   становится auto), .scroll превращается в отдельный скролл-контейнер, и sticky
-   у шапки таблицы (ниже) прилипает к границам .scroll, а не к окну — та улетает
-   вместе со страницей, а не остаётся на экране. Вертикальная прокрутка внутри
-   .scroll не нужна и не используется (высота не ограничена), поэтому clip
-   ничего не обрезает — только убирает сам скролл-контейнер. */
-.scroll { overflow-x: auto; overflow-y: clip; border: 1px solid var(--border); border-radius: 8px; }
+/* .scroll — осознанно ограниченная по высоте область (как замороженные области
+   в Excel): скроллится сама, и по горизонтали, и по вертикали. Раньше пытались
+   держать .scroll БЕЗ ограничения высоты (overflow-x:auto, оставляя вертикаль
+   "visible"/"clip"), чтобы sticky-шапка прилипала к окну страницы — но в обоих
+   протестированных браузерах (Firefox, Chromium) шапка всё равно прилипала
+   относительно .scroll со сдвигом на --nav-h, наезжая на первые строки данных
+   ещё до всякой прокрутки. Раз оба движка трактуют .scroll как точку отсчёта
+   для sticky, делаем это осознанно и переносим отсчёт на 0 (см. thead th ниже)
+   — стандартная, надёжная схема, не полагающаяся на то, что .scroll НЕ должен
+   быть скролл-контейнером. */
+.scroll { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: 8px; }
 /* «во всю ширину окна»: грид вырывается из колонки контента (.app max-width),
    оставляя по 1rem зазора с краями окна; остальная страница не трогается */
 body.grid-wide .scroll {
@@ -243,10 +246,9 @@ table.data th { position: relative; }
 /* значение переносится по ширине столбца (фикс. раскладка), не распирает таблицу */
 table.data td { overflow: hidden; overflow-wrap: anywhere; }
 table.data thead th {
-  /* var(--nav-h) выставляет main.js по факт. высоте .nav (тоже sticky, top:0) —
-     иначе шапка таблицы прилипает В ТОЧНОСТИ туда же и оказывается под навбаром,
-     визуально пропадая при скролле */
-  position: sticky; top: var(--nav-h, 0px); z-index: 2;
+  /* top:0 относительно .scroll (теперь это осознанный, ограниченный по высоте
+     скролл-контейнер — см. .scroll выше), а не относительно окна страницы */
+  position: sticky; top: 0; z-index: 2;
   /* та же акцентная цветовая схема, что у кнопок (.gear/.toolbar>button) — фон с
      лёгким акцентным оттенком + акцентная нижняя граница вместо обычной серой;
      цвет текста не трогаем — иначе потеряется акцентная подсветка hover/sorted */
@@ -261,7 +263,7 @@ table.data thead th {
    фильтра, у него привязка идёт к уже посчитанному (растянутому по строке)
    padding-box ячейки, а не к её "auto"-высоте на момент разбора CSS. Место
    под фильтр резервируем через --filter-h (реальная высота, измеренная в
-   renderGrid — как и --nav-h у main.js), а не гадаем в rem. */
+   renderGrid), а не гадаем в rem. */
 table.data .col-name { font-weight: 600; padding-bottom: var(--filter-h, 2rem); }
 table.data .col-filter-field {
   position: absolute; left: .5rem; right: .5rem; bottom: .3rem;
