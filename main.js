@@ -22,7 +22,7 @@
   var implicitEntities = App.implicitEntities, resolveEntities = App.resolveEntities,
       parseTypes = App.parseTypes, colWidthPx = App.colWidthPx;
   var toCsv = App.toCsv, toXlsWorkbook = App.toXlsWorkbook, exportFilename = App.exportFilename;
-  var viewNav = App.viewNav, viewBuild = App.viewBuild,
+  var viewNav = App.viewNav, viewFooter = App.viewFooter, viewBuild = App.viewBuild,
       viewTableShell = App.viewTableShell, renderAdvFilter = App.renderAdvFilter, renderGrid = App.renderGrid;
 
   // ---------------------------------------------------------------------------
@@ -124,12 +124,15 @@
 
   var store = createStore(reducer, initialState);
   var root = document.getElementById('app');
+  var footerNode = document.body.appendChild(el('footer', { class: 'statusbar' }));
   var lastRoute = null;
   var lastDataset = null;   // ссылка, не сигнатура — build/success всегда создаёт новый объект
   var lastAdvOpen = null;
 
   var render = function (state) {
     var d = store.dispatch;
+
+    clear(footerNode).appendChild(viewFooter(state));
 
     if (!state.manifest || !state.preset) {
       clear(root).appendChild(el('p', { class: 'muted', style: 'padding:1rem' }, 'Инициализация…'));

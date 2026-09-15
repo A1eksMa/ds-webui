@@ -77,13 +77,20 @@
     return el('header', { class: 'nav' },
       el('strong', {}, 'Data Sources — Web UI'),
       el('span', { class: 'spacer' }),
-      state.dataDir
-        ? el('span', { class: 'muted src-dir' }, 'данные: ' + state.dataDir + '/')
-        : el('span', { class: 'muted src-dir warn' }, 'нет data/ и sample-data/'),
       advBtn,
       ctl
     );
   };
 
-  return { opSelect: opSelect, valueControl: valueControl, viewNav: viewNav };
+  // содержимое строки состояния внизу окна (как во многих десктоп-приложениях)
+  // — сам <footer> создаётся один раз в main.js и не прокручивается вместе со
+  // страницей, всегда на виду. Единственное содержимое сейчас — источник
+  // данных (data/ или sample-data/).
+  var viewFooter = function (state) {
+    return state.dataDir
+      ? el('span', { class: 'muted' }, 'данные: ' + state.dataDir + '/')
+      : el('span', { class: 'muted warn' }, 'нет data/ и sample-data/');
+  };
+
+  return { opSelect: opSelect, valueControl: valueControl, viewNav: viewNav, viewFooter: viewFooter };
 });

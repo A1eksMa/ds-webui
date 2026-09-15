@@ -54,7 +54,14 @@ h2 { font-size: 1rem; margin: 1.5rem 0 .5rem; color: var(--muted); text-transfor
   position: sticky; top: 0; background: var(--bg); z-index: 5;
 }
 .nav .spacer { flex: 1; }
-.nav .src-dir { font-size: .85em; }
+/* строка состояния внизу окна (как во многих десктоп-приложениях) — не .app,
+   а прямой ребёнок body: своя горизонтальная отбивка (.app её не даёт снаружи
+   себя), fixed — всегда на виду независимо от скролла страницы */
+.statusbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding: .4rem 1rem; border-top: 1px solid var(--border);
+  background: var(--bg); font-size: .85em;
+}
 .tab {
   border: 1px solid var(--border); background: transparent; color: inherit;
   padding: .35rem .8rem; border-radius: 6px; cursor: pointer; font: inherit;
