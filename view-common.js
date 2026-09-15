@@ -58,9 +58,18 @@
     });
   };
 
-  // Главное меню — три равнозначные кнопки (Настройки/Фильтр/Экспорт), каждая
-  // открывает свою полноэкранную страницу (как «Настройки» открывали и
-  // раньше); единый стиль (.gear) — они формируют один интерфейс перехода ко
+  // Пиктограмма-воронка — та же самая, что и у кнопки применения быстрого
+  // фильтра колонки в view-table.js (переиспользуется оттуда через
+  // ViewCommon.FUNNEL_SVG — единый визуальный язык «это про фильтр»).
+  var FUNNEL_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">'
+    + '<path fill="currentColor" d="M1.7 2h12.6a.5.5 0 0 1 .4.8L10 9.2v3.5a.5.5 0 0 1-.7.46l-2.5-1.1'
+    + 'A.5.5 0 0 1 6.3 11.6V9.2L1.3 2.8A.5.5 0 0 1 1.7 2Z"/></svg>';
+
+  // Главное меню — три равнозначные кнопки (Экспорт/Расширенный фильтр/
+  // Настройки), каждая открывает свою полноэкранную страницу (как
+  // «Настройки» открывали и раньше); единый стиль (.gear) и у каждой —
+  // пиктограмма первым элементом — они формируют один интерфейс перехода ко
   // всему функционалу. На любой не-«Таблица» странице меню сворачивается в
   // одну кнопку «← К таблице» (симметрично тому, как это уже работало у
   // «Настройки» — просто теперь то же правило применено ко всем трём).
@@ -68,18 +77,18 @@
     var menu = state.route === 'table'
       ? [
           el('button', {
-            class: 'gear', title: 'Настройки: изменить пресет по умолчанию',
-            onclick: function () { d({ type: 'route/set', route: 'build' }); }
-          }, '⚙ Настройки'),
+            class: 'gear', disabled: !state.dataset,
+            onclick: function () { d({ type: 'route/set', route: 'export' }); }
+          }, '📤 Экспорт'),
           el('button', {
             class: 'gear', disabled: !state.dataset,
             title: 'Расширенный фильтр и сортировка: временные, поверх выборки, не сохраняются',
             onclick: function () { d({ type: 'route/set', route: 'filter' }); }
-          }, 'Расширенный фильтр'),
+          }, el('span', { html: FUNNEL_SVG }), 'Расширенный фильтр'),
           el('button', {
-            class: 'gear', disabled: !state.dataset,
-            onclick: function () { d({ type: 'route/set', route: 'export' }); }
-          }, 'Экспорт')
+            class: 'gear', title: 'Настройки: изменить пресет по умолчанию',
+            onclick: function () { d({ type: 'route/set', route: 'build' }); }
+          }, '⚙ Настройки')
         ]
       : el('button', {
           class: 'gear', disabled: !state.dataset,
@@ -100,5 +109,8 @@
     return el('span', { class: 'muted' + (warn ? ' warn' : '') }, text);
   };
 
-  return { opSelect: opSelect, valueControl: valueControl, viewNav: viewNav, viewFooter: viewFooter };
+  return {
+    opSelect: opSelect, valueControl: valueControl, viewNav: viewNav, viewFooter: viewFooter,
+    FUNNEL_SVG: FUNNEL_SVG
+  };
 });

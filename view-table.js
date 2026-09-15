@@ -26,6 +26,7 @@
       applyFilters = Dataset.applyFilters, applySort = Dataset.applySort, OP_LIST = Dataset.OP_LIST;
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
   var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl;
+  var FUNNEL_SVG = ViewCommon.FUNNEL_SVG;
 
   var cellNode = function (v, entity, unparsed) {
     var st = '';
@@ -168,10 +169,6 @@
 
   // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
   var colFilterDraft = {};   // столбец -> введённый, но ещё не применённый текст
-  var FUNNEL_SVG =
-    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">'
-    + '<path fill="currentColor" d="M1.7 2h12.6a.5.5 0 0 1 .4.8L10 9.2v3.5a.5.5 0 0 1-.7.46l-2.5-1.1'
-    + 'A.5.5 0 0 1 6.3 11.6V9.2L1.3 2.8A.5.5 0 0 1 1.7 2Z"/></svg>';
 
   var renderGrid = function (state, d) {
     var node = document.getElementById('grid');
