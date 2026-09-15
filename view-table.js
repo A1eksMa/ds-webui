@@ -249,16 +249,14 @@
       );
       var sortDir = state.sort && state.sort.col === c ? state.sort.dir : null;
       return el('th', {},
-        el('div', { class: 'th-inner' },
-          el('div', {
-            class: 'col-name' + (sortDir ? ' sorted' : ''),
-            title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
-            onclick: function () { d({ type: 'table/sort', column: c }); }
-          },
-            el('span', { class: 'col-name-txt' }, c),
-            sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
-          field
-        ),
+        el('div', {
+          class: 'col-name' + (sortDir ? ' sorted' : ''),
+          title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
+          onclick: function () { d({ type: 'table/sort', column: c }); }
+        },
+          el('span', { class: 'col-name-txt' }, c),
+          sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
+        field,
         el('div', {
           class: 'col-resizer',
           title: 'Потяните — ширина столбца; двойной клик — сброс',
@@ -318,6 +316,16 @@
       el('table', { class: 'data', style: 'width:' + totalW + 'px' },
         colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
     ));
+
+    // реальная высота поля быстрого фильтра — под неё резервируется место в
+    // .col-name (padding-bottom: var(--filter-h)), чтобы прижатый ко дну
+    // ячейки (position:absolute) фильтр не перекрывал текст заголовка и не
+    // "гулял" по высоте между столбцами с разной длиной заголовка
+    var oneFilter = node.querySelector('.col-filter-field');
+    var docEl = document.documentElement;
+    if (oneFilter && docEl && docEl.style && typeof docEl.style.setProperty === 'function') {
+      docEl.style.setProperty('--filter-h', oneFilter.offsetHeight + 'px');
+    }
   };
 
   return { cellNode: cellNode, viewTableShell: viewTableShell, renderAdvFilter: renderAdvFilter, renderGrid: renderGrid };

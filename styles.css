@@ -180,7 +180,13 @@ input[type=text], select {
 .nav .gear.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 table.data .col-name {
   cursor: pointer; user-select: none;
-  display: flex; align-items: baseline; gap: .15rem;
+  /* align-items:flex-start, не baseline — раньше заголовок был однострочный,
+     и baseline работал нормально; когда col-name-txt стал переноситься по
+     словам, расчёт высоты flex-контейнера по базовой линии многострочного
+     элемента в браузерах занижался, и вторая строка текста визуально
+     вылезала за пределы <th>, заезжая в первую строку данных таблицы —
+     видно сразу, без скролла. flex-start считает высоту однозначно. */
+  display: flex; align-items: flex-start; gap: .15rem;
 }
 table.data .col-name .col-name-txt { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 table.data .col-name:hover { color: var(--accent); }
@@ -233,7 +239,7 @@ table.data th, table.data td {
   border-bottom: 1px solid var(--border); padding: .3rem .5rem; text-align: left;
   vertical-align: top;
 }
-table.data th { position: relative; padding: 0; }
+table.data th { position: relative; }
 /* значение переносится по ширине столбца (фикс. раскладка), не распирает таблицу */
 table.data td { overflow: hidden; overflow-wrap: anywhere; }
 table.data thead th {
@@ -247,17 +253,19 @@ table.data thead th {
   background: color-mix(in srgb, var(--accent) 12%, var(--head-bg));
   border-bottom: 2px solid var(--accent);
 }
-/* .th-inner заполняет всю (растянутую по строке) высоту ячейки — заголовки разной
-   высоты (перенос по словам) больше не сбивают высоту фильтра построчно: он одной
-   и той же (margin-top:auto) прижат к нижнему краю ячейки во всех столбцах */
-table.data .th-inner {
-  display: flex; flex-direction: column; height: 100%;
-  padding: .3rem .5rem; box-sizing: border-box;
-}
-table.data .col-name { font-weight: 600; }
+/* Прижать фильтр к низу ячейки процентной высотой (height:100% на обёртке) не
+   получилось: у <th> самого нет явно заданной высоты (она "auto", зависит от
+   контента), а по CSS 2.1 10.5 процентная высота потомка при этом тоже
+   считается "auto" — обёртка просто сжималась под свой контент, как и раньше
+   (проверено в двух браузерах). Рабочий вариант — position:absolute у самого
+   фильтра, у него привязка идёт к уже посчитанному (растянутому по строке)
+   padding-box ячейки, а не к её "auto"-высоте на момент разбора CSS. Место
+   под фильтр резервируем через --filter-h (реальная высота, измеренная в
+   renderGrid — как и --nav-h у main.js), а не гадаем в rem. */
+table.data .col-name { font-weight: 600; padding-bottom: var(--filter-h, 2rem); }
 table.data .col-filter-field {
-  position: relative; display: flex; align-items: stretch;
-  min-width: 0; overflow: hidden; margin-top: auto; padding-top: .2rem;
+  position: absolute; left: .5rem; right: .5rem; bottom: .3rem;
+  display: flex; align-items: stretch; overflow: hidden;
 }
 table.data .col-filter { width: 100%; min-width: 0; font-size: .9em; padding-right: 1.7rem; }
 table.data .col-filter-apply {
