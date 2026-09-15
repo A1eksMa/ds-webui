@@ -47,12 +47,6 @@
   var viewTableShell = function (state, d) {
     var cols = state.dataset ? state.dataset.columns : [];
     var toolbar = el('div', { class: 'toolbar' },
-      el('label', { class: 'field small' }, 'Группировать по',
-        el('select', { onchange: function (e) { d({ type: 'table/setGroupBy', column: e.target.value }); } },
-          [el('option', { value: '' }, '—')].concat(cols.map(function (c) {
-            return el('option', { value: c, selected: c === state.groupBy }, c);
-          })))
-      ),
       el('label', { class: 'chk' },
         el('input', {
           type: 'checkbox', checked: state.hideEmpty,
@@ -118,23 +112,51 @@
 
     var shown = applyAdvanced(state.dataset, state.adv).rows.length;
 
+    var groupRow = function (col, i) {
+      return el('div', { class: 'condition' },
+        el('select', { onchange: function (e) { d({ type: 'group/update', index: i, column: e.target.value }); } },
+          [el('option', { value: '' }, 'поле…')].concat(cols.map(function (c) {
+            return el('option', { value: c, selected: c === col }, c);
+          }))),
+        el('button', {
+          class: 'link', title: 'выше', disabled: i === 0,
+          onclick: function () { d({ type: 'group/move', index: i, dir: -1 }); }
+        }, '↑'),
+        el('button', {
+          class: 'link', title: 'ниже', disabled: i === state.groupBy.length - 1,
+          onclick: function () { d({ type: 'group/move', index: i, dir: 1 }); }
+        }, '↓'),
+        el('button', { class: 'link', onclick: function () { d({ type: 'group/remove', index: i }); } }, '✕')
+      );
+    };
+
     node.appendChild(el('div', { class: 'advfilter-panel' },
       el('div', { class: 'advfilter-head' },
         el('strong', {}, 'Расширенный фильтр'),
         el('span', { class: 'muted' }, ' — поверх настроек, до быстрых; не входит в пресет'),
         el('span', { class: 'spacer' }),
-        el('button', {
-          class: 'link', disabled: !state.adv.length,
-          onclick: function () { d({ type: 'adv/reset' }); }
-        }, 'Сбросить всё'),
         el('button', { class: 'link', onclick: function () { d({ type: 'adv/toggle' }); } }, 'Скрыть')
       ),
+      el('h2', { style: 'margin:.6rem 0 .3rem' }, 'Условия'),
       state.adv.length
         ? el('div', { class: 'conditions' }, state.adv.map(advRow))
         : el('p', { class: 'muted', style: 'margin:.2rem 0' }, 'условий нет — выборка как из «Конструктора»'),
       el('div', { class: 'advfilter-foot' },
         el('button', { class: 'link', onclick: function () { d({ type: 'adv/add' }); } }, '+ условие'),
+        el('button', {
+          class: 'link', disabled: !state.adv.length,
+          onclick: function () { d({ type: 'adv/reset' }); }
+        }, 'сбросить условия'),
         el('span', { class: 'muted' }, 'показано ' + shown + ' из ' + state.dataset.rows.length)
+      ),
+      el('h2', { style: 'margin:.8rem 0 .3rem' }, 'Группировка'),
+      el('p', { class: 'muted', style: 'margin:.2rem 0' },
+        'уровни применяются по порядку сверху вниз (вложенно): сначала группируем по первому полю, внутри каждой группы — по второму, и так далее'),
+      state.groupBy.length
+        ? el('div', { class: 'conditions' }, state.groupBy.map(groupRow))
+        : el('p', { class: 'muted', style: 'margin:.2rem 0' }, 'группировки нет — строки таблицы плоским списком'),
+      el('div', { class: 'advfilter-foot' },
+        el('button', { class: 'link', onclick: function () { d({ type: 'group/add' }); } }, '+ уровень группировки')
       )
     ));
   };
@@ -264,28 +286,67 @@
       );
     }));
 
+    // многоуровневая группировка — уровни (state.groupBy) применяются вложенно,
+    // по порядку; поле, которого больше нет среди колонок (устаревший выбор
+    // после смены пресета), пропускается, как и пустое (ещё не выбранное)
+    var activeGroups = (state.groupBy || []).filter(function (c) { return c && cols.indexOf(c) !== -1; });
     var bodyRows = [];
-    if (state.groupBy && cols.indexOf(state.groupBy) !== -1) {
-      var groups = groupBy(function (r) { return String(r[state.groupBy] == null ? '∅' : r[state.groupBy]); })(filtered.rows);
-      var keys = Object.keys(groups).sort();
-      keys.forEach(function (k) {
-        var open = !!state.expanded[k];
-        bodyRows.push(el('tr', { class: 'grp' + (open ? ' open' : '') },
-          el('td', { colspan: cols.length, onclick: function () { d({ type: 'table/toggleGroup', key: k }); } },
-            el('span', { class: 'caret' }, open ? '▾' : '▸'),
-            ' ', state.groupBy, ' = ', el('strong', {}, k),
-            el('span', { class: 'muted' }, '  (' + groups[k].length + ')')
-          )
-        ));
-        if (open) groups[k].forEach(function (r) {
-          bodyRows.push(el('tr', { class: 'member' }, cols.map(function (c) {
-            return cellNode(r[c], entMap[c], r.__u && r.__u[c]);
-          })));
+
+    if (activeGroups.length) {
+      var memberIndent = (.5 + activeGroups.length * 1.2) + 'rem';
+      var allKeys = [];
+
+      // ключ узла — путь от корня (JSON, а не просто значение): на разных
+      // уровнях/ветках значения могут совпадать текстуально
+      var collectDeepKeys = function (rows, path) {
+        var lvl = activeGroups[path.length];
+        if (lvl === undefined) return;
+        var gs = groupBy(function (r) { return String(r[lvl] == null ? '∅' : r[lvl]); })(rows);
+        Object.keys(gs).forEach(function (k) {
+          var subPath = path.concat([k]);
+          allKeys.push(JSON.stringify(subPath));
+          collectDeepKeys(gs[k], subPath);
         });
-      });
+      };
+
+      var renderLevel = function (rows, path) {
+        var lvl = activeGroups[path.length];
+        if (lvl === undefined) {
+          rows.forEach(function (r) {
+            bodyRows.push(el('tr', { class: 'member' }, cols.map(function (c, i) {
+              var cell = cellNode(r[c], entMap[c], r.__u && r.__u[c]);
+              if (i === 0) cell.style.paddingLeft = memberIndent;
+              return cell;
+            })));
+          });
+          return;
+        }
+        var groups = groupBy(function (r) { return String(r[lvl] == null ? '∅' : r[lvl]); })(rows);
+        var keys = Object.keys(groups).sort();
+        keys.forEach(function (k) {
+          var subPath = path.concat([k]);
+          var pathKey = JSON.stringify(subPath);
+          allKeys.push(pathKey);
+          var open = !!state.expanded[pathKey];
+          bodyRows.push(el('tr', { class: 'grp' + (open ? ' open' : '') },
+            el('td', {
+              colspan: cols.length, style: 'padding-left:' + (.5 + path.length * 1.2) + 'rem',
+              onclick: function () { d({ type: 'table/toggleGroup', key: pathKey }); }
+            },
+              el('span', { class: 'caret' }, open ? '▾' : '▸'),
+              ' ', lvl, ' = ', el('strong', {}, k),
+              el('span', { class: 'muted' }, '  (' + groups[k].length + ')')
+            )
+          ));
+          if (open) renderLevel(groups[k], subPath);
+          else collectDeepKeys(groups[k], subPath);
+        });
+      };
+
+      renderLevel(filtered.rows, []);
 
       node.appendChild(el('div', { class: 'grp-actions' },
-        el('button', { class: 'link', onclick: function () { d({ type: 'table/expandAll', keys: keys }); } }, 'развернуть все'),
+        el('button', { class: 'link', onclick: function () { d({ type: 'table/expandAll', keys: allKeys }); } }, 'развернуть все'),
         el('button', { class: 'link', onclick: function () { d({ type: 'table/collapseAll' }); } }, 'свернуть все')
       ));
     } else {

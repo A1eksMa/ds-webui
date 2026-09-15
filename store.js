@@ -130,7 +130,7 @@
     buildError: null,
     dataset: null,
     tableFilters: {},
-    groupBy: '',
+    groupBy: [],             // список полей группировки — применяются последовательно (вложенно)
     hideEmpty: false,
     expanded: {},
     srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
@@ -308,7 +308,7 @@
       case 'build/success':
         return Object.assign({}, state, {
           building: false, buildError: null, dataset: a.dataset,
-          tableFilters: {}, groupBy: '', hideEmpty: false, expanded: {},
+          tableFilters: {}, groupBy: [], hideEmpty: false, expanded: {},
           adv: [], sort: null            // транзиентные слои сбрасываются при пересборке
         });
 
@@ -318,8 +318,26 @@
         return Object.assign({}, state, { tableFilters: tf });
       }
 
-      case 'table/setGroupBy':
-        return Object.assign({}, state, { groupBy: a.column, expanded: {} });
+      case 'group/add':
+        return Object.assign({}, state, { groupBy: state.groupBy.concat(['']) });
+
+      case 'group/update':
+        return Object.assign({}, state, {
+          groupBy: state.groupBy.map(function (c, i) { return i === a.index ? a.column : c; }),
+          expanded: {}
+        });
+
+      case 'group/remove':
+        return Object.assign({}, state, {
+          groupBy: state.groupBy.filter(function (_, i) { return i !== a.index; }),
+          expanded: {}
+        });
+
+      case 'group/move':
+        return Object.assign({}, state, {
+          groupBy: _swap(state.groupBy, a.index, a.index + a.dir),
+          expanded: {}
+        });
 
       case 'table/toggleHideEmpty':
         return Object.assign({}, state, { hideEmpty: !state.hideEmpty });
