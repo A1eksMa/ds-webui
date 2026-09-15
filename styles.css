@@ -289,7 +289,7 @@ table.data thead th {
      лёгким акцентным оттенком + акцентная нижняя граница вместо обычной серой;
      цвет текста не трогаем — иначе потеряется акцентная подсветка hover/sorted */
   background: color-mix(in srgb, var(--accent) 12%, var(--head-bg));
-  border-bottom: 2px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
 }
 /* Прижать фильтр к низу ячейки процентной высотой (height:100% на обёртке) не
    получилось: у <th> самого нет явно заданной высоты (она "auto", зависит от
