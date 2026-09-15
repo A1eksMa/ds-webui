@@ -75,7 +75,7 @@
         }, 'Расширенный фильтр ' + (state.advOpen ? '▾' : '▸'))
       : null;
     return el('header', { class: 'nav' },
-      el('strong', {}, 'ds-webui'),
+      el('strong', {}, 'Data Sources — Web UI'),
       el('span', { class: 'spacer' }),
       state.dataDir
         ? el('span', { class: 'muted src-dir' }, 'данные: ' + state.dataDir + '/')
