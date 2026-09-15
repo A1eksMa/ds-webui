@@ -73,7 +73,6 @@
     );
 
     return el('section', { class: 'page table' },
-      el('h1', {}, 'Таблица'),
       el('div', { class: 'table-headbar' },
         state.dataset ? toolbar : null,
         el('div', { class: 'advfilter', id: 'advfilter' })
