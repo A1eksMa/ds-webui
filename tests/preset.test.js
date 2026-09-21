@@ -11,7 +11,20 @@ test('normalizePreset: пустой объект -> валидная дефол�
   assert.deepEqual(p.query.sources, {});
   assert.deepEqual(p.view.entities, []);
   assert.deepEqual(p.view.conditions, []);
+  assert.deepEqual(p.view.entityConditions, []);
   assert.deepEqual(p.view.joins, []);
+});
+
+// entityConditions — второй проход фильтрации (по индикаторам, после расчёта),
+// независимый список от conditions (по сырым полям, до расчёта) — см. view-build.js/
+// view-entities.js
+test('normalizePreset: entityConditions нормализуется независимо от conditions', () => {
+  const p = App.normalizePreset({ view: {
+    conditions: [{ field: 'CRM.status', op: 'eq', value: 'active' }],
+    entityConditions: [{ field: 'Выручка', op: 'gt', value: '0' }]
+  } });
+  assert.deepEqual(p.view.conditions, [{ field: 'CRM.status', op: 'eq', value: 'active' }]);
+  assert.deepEqual(p.view.entityConditions, [{ field: 'Выручка', op: 'gt', value: '0' }]);
 });
 
 test('normalizePreset: мигрирует старое view.column_filters в view.conditions', () => {
@@ -125,6 +138,42 @@ test('reducer: preset/toggleSource выключает источник обра�
   });
   const next = App.reducer(state, { type: 'preset/toggleSource', name: 'CRM' });
   assert.equal(next.preset.query.sources.CRM, undefined);
+});
+
+// «+ показатель источника» (view-entities.js): добавляет поле как есть, без
+// проверки «уже занято» — то же поле допустимо добавить повторно
+test('reducer: preset/addFieldEntity добавляет поле как есть', () => {
+  const preset = App.normalizePreset({ query: { sources: { CRM: { labels: ['id'] } } } });
+  const state = Object.assign({}, App.initialState, { preset: preset });
+  const next = App.reducer(state, { type: 'preset/addFieldEntity', column: 'CRM.id' });
+  assert.deepEqual(next.preset.view.entities[0],
+    { name: 'CRM.id', type: 'text', hidden: false, from: { kind: 'field', column: 'CRM.id' } });
+});
+
+test('reducer: preset/addFieldEntity не блокирует повторное добавление того же поля', () => {
+  const preset = App.normalizePreset({ query: { sources: { CRM: { labels: ['id'] } } } });
+  var state = Object.assign({}, App.initialState, { preset: preset });
+  state = Object.assign({}, state, { preset: App.reducer(state, { type: 'preset/addFieldEntity', column: 'CRM.id' }).preset });
+  const next = App.reducer(state, { type: 'preset/addFieldEntity', column: 'CRM.id' });
+  assert.equal(next.preset.view.entities.length, 2);
+  assert.equal(next.preset.view.entities[1].from.column, 'CRM.id');
+});
+
+// условия «Индикаторов» — свой независимый список, свои экшены
+test('reducer: preset/addEntityCondition / updateEntityCondition / removeEntityCondition', () => {
+  const preset = App.normalizePreset({});
+  var state = Object.assign({}, App.initialState, { preset: preset });
+  state = Object.assign({}, state, { preset: App.reducer(state, { type: 'preset/addEntityCondition' }).preset });
+  assert.deepEqual(state.preset.view.entityConditions, [{ field: '', op: 'contains', value: '' }]);
+  assert.deepEqual(state.preset.view.conditions, []);   // независимо от conditions «Настроек»
+
+  state = Object.assign({}, state, {
+    preset: App.reducer(state, { type: 'preset/updateEntityCondition', index: 0, patch: { field: 'Выручка', value: '100' } }).preset
+  });
+  assert.deepEqual(state.preset.view.entityConditions[0], { field: 'Выручка', op: 'contains', value: '100' });
+
+  const next = App.reducer(state, { type: 'preset/removeEntityCondition', index: 0 });
+  assert.deepEqual(next.preset.view.entityConditions, []);
 });
 
 // «Экспорт» и «Расширенный фильтр» — взаимоисключающие области над таблицей

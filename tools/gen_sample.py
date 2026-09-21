@@ -48,6 +48,7 @@ BASE_PRESET = {
             {"left": "CRM", "left_field": "customer_id", "right": "ERP", "right_field": "client_ref"}
         ],
         "conditions": [],
+        "entityConditions": [],
         "entities": []
     }
 }

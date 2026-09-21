@@ -248,9 +248,16 @@
     }).map(function (p) { return p[0]; });
   };
 
+  // Индикаторы, помеченные hidden (см. view-entities.js), считаются и доступны
+  // условиям (applyConditions видит их в dataset.columns), но не выводятся в
+  // таблицу/экспорт/расширенный фильтр — отфильтровываются тут, до hideEmpty.
   var visibleColumns = function (dataset, hideEmpty) {
-    if (!hideEmpty) return dataset.columns;
-    return dataset.columns.filter(function (c) {
+    var hidden = dataset.hiddenColumns;
+    var cols = hidden && hidden.length
+      ? dataset.columns.filter(function (c) { return hidden.indexOf(c) === -1; })
+      : dataset.columns;
+    if (!hideEmpty) return cols;
+    return cols.filter(function (c) {
       return dataset.rows.some(function (r) { return r[c] != null && r[c] !== ''; });
     });
   };

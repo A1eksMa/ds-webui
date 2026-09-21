@@ -72,7 +72,7 @@
     clear(node);
     if (!state.advOpen || !state.dataset) return;
 
-    var cols = state.dataset.columns;
+    var cols = visibleColumns(state.dataset, false);   // скрытые индикаторы тут не предлагаем
     var advRow = function (row, i) {
       var patch = function (p) { d({ type: 'adv/update', index: i, patch: p }); };
       return el('div', { class: 'condition' + (OP_LIST[row.op] ? ' has-list' : '') },

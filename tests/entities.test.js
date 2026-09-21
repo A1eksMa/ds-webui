@@ -87,3 +87,33 @@ test('normalizeEntities: отбрасывает сущность без исто
   const view = { entities: [{ name: 'x', from: { kind: 'field', column: '' } }] };
   assert.deepEqual(App.normalizeEntities(view), []);
 });
+
+// hidden: скрытый индикатор считается и фильтруется, но не выводится в таблицу
+// (см. dataset.js::visibleColumns) — по умолчанию false, если не задан явно
+test('normalizeEntities: hidden сохраняется, если задан true', () => {
+  const view = { entities: [{ name: 'x', hidden: true, from: { kind: 'field', column: 'a' } }] };
+  assert.equal(App.normalizeEntities(view)[0].hidden, true);
+});
+
+test('normalizeEntities: hidden по умолчанию false', () => {
+  const view = { entities: [{ name: 'x', from: { kind: 'field', column: 'a' } }] };
+  assert.equal(App.normalizeEntities(view)[0].hidden, false);
+});
+
+// одно и то же сырое поле можно добавить как сущность несколько раз (как есть
+// + как вход производной, или просто дважды) — normalizeEntities не блокирует
+test('normalizeEntities: одно поле в нескольких сущностях допустимо', () => {
+  const view = { entities: [
+    { name: 'a raw', from: { kind: 'field', column: 'a' } },
+    { name: 'a again', from: { kind: 'field', column: 'a' } }
+  ] };
+  const out = App.normalizeEntities(view);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].from.column, 'a');
+  assert.equal(out[1].from.column, 'a');
+});
+
+test('entityOutNames: дедуплицирует одинаковые имена (a, a (2))', () => {
+  const entities = [{ name: 'a' }, { name: 'a' }, { name: 'a' }];
+  assert.deepEqual(App.entityOutNames(entities), ['a', 'a (2)', 'a (3)']);
+});

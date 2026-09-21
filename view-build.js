@@ -1,32 +1,31 @@
 'use strict';
 
 // Страница «Настройки» (бывший «Конструктор выборки»): источники, связки
-// между ними, условия — то, что в SQL идёт после FROM (откуда берём данные
-// и как их отбираем). Столбцы результата (сущности) — отдельная страница
-// «Индикаторы», см. view-entities.js. DOM-зависимый код — не тестируется под
-// node:test. Зависит от util.js, store.js, entities.js (entityOutNames),
-// dataset.js (OP_LIST/JOIN_TYPES), view-common.js. Ссылки на main.js
+// между ними, условия по сырым полям источников — то, что в SQL идёт после
+// FROM/WHERE (откуда берём данные и как их отбираем ДО расчёта индикаторов).
+// Столбцы результата и второй проход условий (по индикаторам) — отдельная
+// страница «Индикаторы», см. view-entities.js. DOM-зависимый код — не
+// тестируется под node:test. Зависит от util.js, store.js, dataset.js
+// (JOIN_TYPES), view-common.js (conditionsBlock). Ссылки на main.js
 // (buildDataset/store) разрешаются лениво через window.DS_APP в момент
 // клика — main.js грузится последним, но к моменту, когда пользователь
 // может кликнуть, все скрипты уже выполнены.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
-      require('./util.js'), require('./store.js'), require('./entities.js'),
-      require('./dataset.js'), require('./view-common.js')
+      require('./util.js'), require('./store.js'), require('./dataset.js'), require('./view-common.js')
     );
   } else {
     root.DS_APP = root.DS_APP || {};
-    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
+    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
   }
-})(typeof window !== 'undefined' ? window : this, function (Util, Store, Entities, Dataset, ViewCommon) {
+})(typeof window !== 'undefined' ? window : this, function (Util, Store, Dataset, ViewCommon) {
 
   var el = Util.el, uniq = Util.uniq, fmtDate = Util.fmtDate;
   var selectedNames = Store.selectedNames, isStale = Store.isStale, basePreset = Store.basePreset,
       savePreset = Store.savePreset, loadPresetFile = Store.loadPresetFile;
-  var entityOutNames = Entities.entityOutNames;
-  var OP_LIST = Dataset.OP_LIST, JOIN_TYPES = Dataset.JOIN_TYPES;
-  var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl;
+  var JOIN_TYPES = Dataset.JOIN_TYPES;
+  var conditionsBlock = ViewCommon.conditionsBlock;
 
   var badge = function (ms) {
     return isStale(ms)
@@ -126,26 +125,19 @@
       return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
     }, []);
 
-    // поля для условий = ровно те столбцы, что будут в таблице после построения:
-    // при заданных сущностях — их итоговые имена; иначе — выбранные сырые столбцы
-    // (неявные 1:1-сущности). Сырые столбцы при наличии сущностей НЕ предлагаем —
-    // после резолва их в строках нет, условие по ним обнуляло бы выборку.
-    var condFields = preset.view.entities.length
-      ? entityOutNames(preset.view.entities)
-      : pickedColumns;
-
-    var conditionRow = function (cond, i) {
-      var patch = function (p) { d({ type: 'preset/updateCondition', index: i, patch: p }); };
-      return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
-        el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
-          [el('option', { value: '' }, 'поле…')].concat(condFields.map(function (c) {
-            return el('option', { value: c, selected: c === cond.field }, c);
-          }))),
-        opSelect(cond.op, function (v) { patch({ op: v }); }),
-        valueControl(cond.op, cond.value, function (v) { patch({ value: v }); }),
-        el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeCondition', index: i }); } }, '✕')
-      );
-    };
+    // условия «Настроек» — первый проход фильтрации, сразу после JOIN, по сырым
+    // полям источников (до расчёта индикаторов — они на «Настройках» ещё не
+    // посчитаны). Второй проход, по именам индикаторов — на странице «Индикаторы»
+    // (view.entityConditions, применяется после resolveEntities в main.js).
+    var settingsConditions = conditionsBlock({
+      d: d,
+      title: 'Условия (сужают выборку при построении)',
+      hint: 'применяются по порядку (И) при построении, сразу после связок — до расчёта индикаторов; '
+        + 'фильтр по индикаторам — на странице «Индикаторы»',
+      fields: pickedColumns,
+      conditions: preset.view.conditions,
+      actions: { add: 'preset/addCondition', update: 'preset/updateCondition', remove: 'preset/removeCondition' }
+    });
 
     return el('section', { class: 'page build' },
       el('h1', {}, 'Конструктор выборки'),
@@ -167,13 +159,7 @@
           + 'правого, внутреннее — только совпавшие, полное — все')
       ) : null,
 
-      pickedColumns.length ? el('div', {},
-        el('h2', {}, 'Условия (сужают выборку при построении)'),
-        el('div', { class: 'conditions' }, preset.view.conditions.map(conditionRow)),
-        el('button', { class: 'link', onclick: function () { d({ type: 'preset/addCondition' }); } }, '+ условие'),
-        el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
-          'применяются по порядку (И) при построении — на «Таблице» останутся только подходящие строки')
-      ) : null,
+      settingsConditions,
 
       state.buildError ? el('p', { class: 'error' }, state.buildError) : null,
 

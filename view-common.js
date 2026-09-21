@@ -58,6 +58,35 @@
     });
   };
 
+  // Блок условий отбора — общий для «Настроек» (по сырым полям источников,
+  // до расчёта сущностей) и «Индикаторов» (по именам сущностей, после
+  // расчёта): один и тот же UI, разные списки полей и разные экшены
+  // редьюсера (actions), чтобы каждая страница хранила свой список условий
+  // в своей секции пресета. Ничего не рендерит, если fields пуст (нечего
+  // фильтровать) — вызывающая сторона сама решает это условие ей не нужно.
+  var conditionsBlock = function (opts) {
+    if (!opts.fields.length) return null;
+    var d = opts.d;
+    var row = function (cond, i) {
+      var patch = function (p) { d({ type: opts.actions.update, index: i, patch: p }); };
+      return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
+        el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
+          [el('option', { value: '' }, 'поле…')].concat(opts.fields.map(function (c) {
+            return el('option', { value: c, selected: c === cond.field }, c);
+          }))),
+        opSelect(cond.op, function (v) { patch({ op: v }); }),
+        valueControl(cond.op, cond.value, function (v) { patch({ value: v }); }),
+        el('button', { class: 'link', onclick: function () { d({ type: opts.actions.remove, index: i }); } }, '✕')
+      );
+    };
+    return el('div', {},
+      el('h2', {}, opts.title),
+      el('div', { class: 'conditions' }, opts.conditions.map(row)),
+      el('button', { class: 'link', onclick: function () { d({ type: opts.actions.add }); } }, '+ условие'),
+      el('p', { class: 'muted', style: 'margin:.3rem 0 0' }, opts.hint)
+    );
+  };
+
   // Пиктограмма-воронка — та же самая, что и у кнопки применения быстрого
   // фильтра колонки в view-table.js (переиспользуется оттуда через
   // ViewCommon.FUNNEL_SVG — единый визуальный язык «это про фильтр»).
@@ -154,6 +183,6 @@
 
   return {
     opSelect: opSelect, valueControl: valueControl, viewNav: viewNav, viewFooter: viewFooter,
-    FUNNEL_SVG: FUNNEL_SVG
+    conditionsBlock: conditionsBlock, FUNNEL_SVG: FUNNEL_SVG
   };
 });

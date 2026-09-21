@@ -31,6 +31,7 @@ window.DS_BASE_PRESET = {
       }
     ],
     "conditions": [],
+    "entityConditions": [],
     "entities": []
   }
 };

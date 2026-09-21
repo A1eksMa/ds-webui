@@ -105,3 +105,21 @@ test('applySort: числа сравниваются как числа, пуст
   const out = App.applySort(rows, { col: 'v', dir: 'asc' });
   assert.deepEqual(out.map((r) => r.v), ['2', '10', '']);
 });
+
+// visibleColumns: скрытые индикаторы (dataset.hiddenColumns, см. main.js/view-entities.js
+// «скрыть в таблице») не выводятся ни в таблицу, ни в экспорт — независимо от hideEmpty
+test('visibleColumns: без hiddenColumns отдаёт все столбцы как есть', () => {
+  const ds = { columns: ['a', 'b'], rows: [{ a: '1', b: '2' }] };
+  assert.deepEqual(App.visibleColumns(ds, false), ['a', 'b']);
+});
+
+test('visibleColumns: столбцы из hiddenColumns исключаются', () => {
+  const ds = { columns: ['a', 'b', 'c'], rows: [{ a: '1', b: '2', c: '3' }], hiddenColumns: ['b'] };
+  assert.deepEqual(App.visibleColumns(ds, false), ['a', 'c']);
+});
+
+test('visibleColumns: hiddenColumns и hideEmpty применяются вместе', () => {
+  const ds = { columns: ['a', 'b', 'c'], rows: [{ a: '', b: '2', c: '' }], hiddenColumns: ['b'] };
+  // b скрыт явно, a и c скрыты как пустые -> ничего не остаётся
+  assert.deepEqual(App.visibleColumns(ds, true), []);
+});

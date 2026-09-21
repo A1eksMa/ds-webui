@@ -324,6 +324,7 @@
       var out = {
         name: typeof e.name === 'string' ? e.name : '',
         type: _ENT_TYPE[e.type] ? e.type : 'text',
+        hidden: !!e.hidden,
         from: from
       };
       var p = e.parse && typeof e.parse === 'object' ? e.parse : null;

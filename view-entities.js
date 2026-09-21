@@ -3,25 +3,32 @@
 // Страница «Индикаторы»: сущности — столбцы итоговой таблицы. То, что в SQL
 // идёт после SELECT (какие поля показать и как их посчитать), в отличие от
 // «Настроек» (источники/связки/условия — то, что после FROM). Из выбранных
-// на «Настройках» полей строишь итоговые столбцы: поле как есть, разрешение
-// коллизии по весам, либо производная. DOM-зависимый код — не тестируется
-// под node:test. Зависит от util.js, store.js (selectedNames), entities.js
-// (ENTITY_KINDS/ENTITY_TYPES/DERIVED_OPS). Ссылка на main.js
-// (buildDataset/store) разрешается лениво через window.DS_APP в момент
-// клика — main.js грузится последним.
+// на «Настройках» полей строишь итоговые столбцы: поле как есть («+ показатель
+// источника» — без типизации/переименования), разрешение коллизии по весам,
+// производная, либо переименованное/типизированное поле («+ индикатор»).
+// Условия внизу страницы — второй проход фильтрации (после условий «Настроек»
+// на сырых полях), уже по именам сущностей, применяется в main.js после
+// resolveEntities. DOM-зависимый код — не тестируется под node:test. Зависит
+// от util.js, store.js (selectedNames), entities.js (ENTITY_KINDS/
+// ENTITY_TYPES/DERIVED_OPS/entityOutNames), view-common.js (conditionsBlock).
+// Ссылка на main.js (buildDataset/store) разрешается лениво через
+// window.DS_APP в момент клика — main.js грузится последним.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = factory(require('./util.js'), require('./store.js'), require('./entities.js'));
+    module.exports = factory(
+      require('./util.js'), require('./store.js'), require('./entities.js'), require('./view-common.js')
+    );
   } else {
     root.DS_APP = root.DS_APP || {};
-    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP));
+    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
   }
-})(typeof window !== 'undefined' ? window : this, function (Util, Store, Entities) {
+})(typeof window !== 'undefined' ? window : this, function (Util, Store, Entities, ViewCommon) {
 
   var el = Util.el;
   var selectedNames = Store.selectedNames;
   var ENTITY_KINDS = Entities.ENTITY_KINDS, ENTITY_TYPES = Entities.ENTITY_TYPES,
-      DERIVED_OPS = Entities.DERIVED_OPS;
+      DERIVED_OPS = Entities.DERIVED_OPS, entityOutNames = Entities.entityOutNames;
+  var conditionsBlock = ViewCommon.conditionsBlock;
 
   var viewEntities = function (state, d) {
     var preset = state.preset;
@@ -144,13 +151,19 @@
       var typeSelect = el('select', { onchange: function (ev) { up({ type: ev.target.value }); } },
         ENTITY_TYPES.map(function (o) { return el('option', { value: o[0], selected: o[0] === (e.type || 'text') }, o[1]); }));
 
-      return el('div', { class: 'entity' },
+      return el('div', { class: 'entity' + (e.hidden ? ' hidden-ent' : '') },
         el('div', { class: 'entity-head' },
           entField('Наименование', el('input', {
             type: 'text', class: 'ent-alias', value: e.name || '', placeholder: 'название столбца',
             onchange: function (ev) { up({ name: ev.target.value }); }
           })),
           el('div', { class: 'entity-tools' },
+            el('label', { class: 'chk', title: 'считается и доступен для условий ниже, но не выводится в таблицу/экспорт' },
+              el('input', {
+                type: 'checkbox', checked: !!e.hidden,
+                onchange: function (ev) { up({ hidden: ev.target.checked }); }
+              }),
+              'скрыть в таблице'),
             el('button', { class: 'link', title: 'переместить выше',
               onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: -1 }); } }, '↑'),
             el('button', { class: 'link', title: 'переместить ниже',
@@ -168,6 +181,29 @@
       );
     };
 
+    // «+ показатель источника» — по кнопке на каждое выбранное поле, без фильтрации
+    // «уже занято»: то же поле можно добавить как есть ещё раз, или рядом с
+    // индикатором, построенным на его основе (например: поле для вида «как есть» +
+    // производный индикатор от него же для расчёта/условия)
+    var addFieldRow = pickedColumns.length ? el('div', { class: 'row', style: 'gap:.3rem;flex-wrap:wrap' },
+      pickedColumns.map(function (c) {
+        return el('button', {
+          class: 'link', title: 'добавить «' + c + '» как есть',
+          onclick: function () { d({ type: 'preset/addFieldEntity', column: c }); }
+        }, '+ ' + c);
+      })
+    ) : null;
+
+    var entityConditions = conditionsBlock({
+      d: d,
+      title: 'Условия по индикаторам',
+      hint: 'второй проход, уже после расчёта индикаторов (первый — на «Настройках», по сырым полям): '
+        + 'применяются по порядку (И), сужают то, что попадёт на «Таблицу» — независимо от того, скрыт ли сам индикатор',
+      fields: entityOutNames(preset.view.entities),
+      conditions: preset.view.entityConditions,
+      actions: { add: 'preset/addEntityCondition', update: 'preset/updateEntityCondition', remove: 'preset/removeEntityCondition' }
+    });
+
     return el('section', { class: 'page entities' },
       el('h1', {}, 'Индикаторы'),
 
@@ -176,14 +212,17 @@
             preset.view.entities.length
               ? el('div', { class: 'entities' }, preset.view.entities.map(entityRow))
               : el('p', { class: 'muted' }, 'сущностей нет — таблица покажет выбранные поля как есть'),
+            el('h2', { style: 'margin-top:.6rem' }, 'Показатели источников (как есть)'),
+            addFieldRow,
             el('div', { class: 'row', style: 'gap:.5rem;margin:.4rem 0 0' },
-              el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntity' }); } }, '+ сущность'),
-              el('button', { class: 'link', onclick: function () { d({ type: 'preset/addAllFieldsAsEntities' }); } },
-                '+ все выбранные поля (1:1)')
+              el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntity' }); } }, '+ индикатор')
             ),
             el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
-              'сущность = один столбец: поле как есть, разрешение коллизии по весам, либо производная. '
-              + 'Порядок строк = порядок столбцов. Тип задаёт парсинг (даты/числа), непарсибельное подсвечивается.')
+              'индикатор = один столбец: переименованное/типизированное поле, разрешение коллизии по весам, '
+              + 'либо производная. Порядок строк = порядок столбцов. Тип задаёт парсинг (даты/числа), '
+              + 'непарсибельное подсвечивается. «Скрыть в таблице» — считается и доступен условиям ниже, но не '
+              + 'показывается в результате.'),
+            entityConditions
           )
         : el('p', { class: 'muted' }, 'Сначала выбери источники и поля на странице «Настройки».'),
 

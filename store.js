@@ -99,7 +99,8 @@
       },
       view: {
         joins: reconcileJoins(Object.keys(normSources), Array.isArray(view.joins) ? view.joins : []),
-        conditions: normalizeConditions(view),
+        conditions: normalizeConditions(view, 'conditions'),
+        entityConditions: normalizeConditions(view, 'entityConditions'),
         entities: normalizeEntities(view),
         column_widths: normalizeColWidths(view)
       }
@@ -117,10 +118,13 @@
     return out;
   };
 
-  // view.conditions [{field, op, value}] + миграция старого view.column_filters
-  // ({column: substring} -> оператор contains).
-  var normalizeConditions = function (view) {
-    var raw = Array.isArray(view.conditions) ? view.conditions : [];
+  // view[key] [{field, op, value}] — список условий; для key='conditions' (условия
+  // «Настроек», по сырым полям источников) ещё мигрирует старый view.column_filters
+  // ({column: substring} -> оператор contains). key='entityConditions' — условия
+  // «Индикаторов», по именам сущностей, считаются вторым проходом после резолва.
+  var normalizeConditions = function (view, key) {
+    key = key || 'conditions';
+    var raw = Array.isArray(view[key]) ? view[key] : [];
     var out = raw.map(function (c) {
       c = c && typeof c === 'object' ? c : {};
       return {
@@ -129,7 +133,7 @@
         value: c.value == null ? '' : String(c.value)
       };
     }).filter(function (c) { return c.field !== '' || c.value !== ''; });
-    if (view.column_filters && typeof view.column_filters === 'object') {
+    if (key === 'conditions' && view.column_filters && typeof view.column_filters === 'object') {
       Object.keys(view.column_filters).forEach(function (col) {
         var v = view.column_filters[col];
         if (v != null && String(v).trim() !== '') {
@@ -239,21 +243,38 @@
         return setIn(state, ['preset', 'view', 'conditions'],
           state.preset.view.conditions.filter(function (_, i) { return i !== a.index; }));
 
+      // условия «Индикаторов» — второй проход фильтрации, после расчёта сущностей
+      // (см. buildDataset в main.js); поле — имя сущности, а не сырого столбца
+      case 'preset/addEntityCondition':
+        return setIn(state, ['preset', 'view', 'entityConditions'],
+          state.preset.view.entityConditions.concat([{ field: '', op: 'contains', value: '' }]));
+
+      case 'preset/updateEntityCondition':
+        return setIn(state, ['preset', 'view', 'entityConditions'],
+          state.preset.view.entityConditions.map(function (c, i) {
+            return i === a.index ? Object.assign({}, c, a.patch) : c;
+          }));
+
+      case 'preset/removeEntityCondition':
+        return setIn(state, ['preset', 'view', 'entityConditions'],
+          state.preset.view.entityConditions.filter(function (_, i) { return i !== a.index; }));
+
       case 'preset/addEntity': {
         var ec = _entityColumns(state.preset);
         var free = ec.all.filter(function (c) { return !ec.used[c]; })[0] || '';
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat([
-          { name: free, type: 'text', from: { kind: 'field', column: free } }
+          { name: free, type: 'text', hidden: false, from: { kind: 'field', column: free } }
         ]));
       }
 
-      case 'preset/addAllFieldsAsEntities': {
-        var ec2 = _entityColumns(state.preset);
-        var add = ec2.all.filter(function (c) { return !ec2.used[c]; }).map(function (c) {
-          return { name: c, type: 'text', from: { kind: 'field', column: c } };
-        });
-        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat(add));
-      }
+      // «+ показатель источника» на «Индикаторах»: добавить поле как есть (без
+      // типизации/переименования). Нарочно без проверки на «уже занято» — можно
+      // добавить одно и то же поле повторно или рядом с индикатором на его основе
+      // (например: сырое поле для вида + производный индикатор для фильтра/расчёта)
+      case 'preset/addFieldEntity':
+        return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat([
+          { name: a.column, type: 'text', hidden: false, from: { kind: 'field', column: a.column } }
+        ]));
 
       case 'preset/updateEntity':
         return setIn(state, ['preset', 'view', 'entities'],

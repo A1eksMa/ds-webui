@@ -72,14 +72,23 @@
         store.dispatch({ type: 'build/error', message: 'Не выбрано ни одного поля для отображения' });
         return;
       }
+      // первый проход: условия «Настроек» — по сырым полям источников, сразу после
+      // JOIN, до расчёта индикаторов (см. view-build.js)
+      var sliced = applyConditions(joined, state.preset.view.conditions || []);
       var ents = state.preset.view.entities.length
         ? state.preset.view.entities
-        : implicitEntities(joined.columns);
-      var re = resolveEntities(joined, ents);
+        : implicitEntities(sliced.columns);
+      var re = resolveEntities(sliced, ents);
       var typed = parseTypes(re, ents, re.columns);
-      var dataset = applyConditions(typed, state.preset.view.conditions || []);
+      // второй проход: условия «Индикаторов» — по именам индикаторов, после расчёта
+      // (см. view-entities.js); индикаторы, скрытые из таблицы, тут всё ещё видны
+      var dataset = applyConditions(typed, state.preset.view.entityConditions || []);
       // сущности с итоговыми (дедуплицированными) именами — для renderGrid / applySort
       dataset.entities = ents.map(function (e, i) { return Object.assign({}, e, { name: re.columns[i] }); });
+      // скрытые индикаторы — считаются и доступны условиям выше, но не выводятся
+      // в таблицу/экспорт (см. visibleColumns в dataset.js)
+      dataset.hiddenColumns = dataset.entities.filter(function (e) { return e.hidden; })
+        .map(function (e) { return e.name; });
       // срез, с которым сделана ИМЕННО эта сборка — не state.preset.query.as_of напрямую:
       // его можно поменять в «Конструкторе» и вернуться на «Таблицу» без пересборки
       dataset.as_of = state.preset.query.as_of;
