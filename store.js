@@ -53,6 +53,33 @@
     }));
   };
 
+  // Связки — не свободный список, а по одной на каждый выбранный источник,
+  // кроме первого (базового): источник входит в выборку в порядке выбора
+  // (порядок ключей query.sources), и каждый следующий присоединяется к уже
+  // накопленному множеству (как SQL: table JOIN t2 JOIN t3 ...), а не к
+  // случайной паре. order — имена источников в порядке выбора; для order[i]
+  // (i>=1) допустимое "слева" — только то, что уже накоплено к этому шагу,
+  // т.е. order[0..i-1]. Существующая связка сохраняется, только если её left
+  // всё ещё входит в этот набор (иначе источник, на который она ссылалась,
+  // убрали/переставили — сбрасываем на выбор заново).
+  var reconcileJoins = function (order, joins) {
+    var byRight = {};
+    (joins || []).forEach(function (j) { if (j && j.right) byRight[j.right] = j; });
+    return order.slice(1).map(function (name, i) {
+      var earlier = order.slice(0, i + 1);
+      var existing = byRight[name];
+      var validLeft = existing && earlier.indexOf(existing.left) !== -1;
+      return {
+        left: validLeft ? existing.left : (earlier.length === 1 ? earlier[0] : ''),
+        left_field: validLeft ? (existing.left_field || '') : '',
+        right: name,
+        right_field: (existing && existing.right_field) || '',
+        // старые пресеты без type — раньше был всегда LEFT JOIN
+        type: existing && JOIN_TYPE_IDS.indexOf(existing.type) !== -1 ? existing.type : 'left'
+      };
+    });
+  };
+
   // Пресет из произвольного объекта → нормализованная форма
   var normalizePreset = function (raw) {
     raw = raw && typeof raw === 'object' ? raw : {};
@@ -71,14 +98,7 @@
         sources: normSources
       },
       view: {
-        joins: Array.isArray(view.joins) ? view.joins.map(function (j) {
-          return {
-            left: j.left || '', left_field: j.left_field || '',
-            right: j.right || '', right_field: j.right_field || '',
-            // старые пресеты без type — раньше был всегда LEFT JOIN
-            type: JOIN_TYPE_IDS.indexOf(j.type) !== -1 ? j.type : 'left'
-          };
-        }) : [],
+        joins: reconcileJoins(Object.keys(normSources), Array.isArray(view.joins) ? view.joins : []),
         conditions: normalizeConditions(view),
         entities: normalizeEntities(view),
         column_widths: normalizeColWidths(view)
@@ -168,7 +188,9 @@
           // пользователя вручную снимать лишние неудобно
           next[a.name] = { labels: ms ? [ms.key] : null };
         }
-        return setIn(state, ['preset', 'query', 'sources'], next);
+        var withSources = setIn(state, ['preset', 'query', 'sources'], next);
+        return setIn(withSources, ['preset', 'view', 'joins'],
+          reconcileJoins(Object.keys(next), state.preset.view.joins));
       }
 
       case 'ui/toggleSrc': {
@@ -195,20 +217,13 @@
         return setIn(state, ['preset', 'view', 'column_widths'], cw);
       }
 
-      case 'preset/addJoin': {
-        var sel = selectedNames(state.preset);
-        var j = { left: sel[0] || '', left_field: '', right: '', right_field: '', type: 'left' };
-        return setIn(state, ['preset', 'view', 'joins'], state.preset.view.joins.concat([j]));
-      }
-
+      // связка привязана к источнику позиционно (см. reconcileJoins) — добавляется/
+      // убирается автоматически вместе с preset/toggleSource, вручную можно только
+      // поправить её поля (left/left_field/right_field/type)
       case 'preset/updateJoin':
         return setIn(state, ['preset', 'view', 'joins'], state.preset.view.joins.map(function (j, i) {
           return i === a.index ? Object.assign({}, j, a.patch) : j;
         }));
-
-      case 'preset/removeJoin':
-        return setIn(state, ['preset', 'view', 'joins'],
-          state.preset.view.joins.filter(function (_, i) { return i !== a.index; }));
 
       case 'preset/addCondition':
         return setIn(state, ['preset', 'view', 'conditions'],

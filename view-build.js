@@ -88,7 +88,12 @@
       return ms ? uniq([ms.key].concat(ms.labels)) : [];
     };
 
-    var joinRow = function (j, i) {
+    // Связка на источник chosen[i+1] (i — его индекс в preset.view.joins) — как SQL:
+    // "слева" может быть только источник, уже накопленный к этому шагу (earlier),
+    // "справа" — сам этот источник, фиксирован (не выбирается, поэтому не select).
+    // Строка появляется/исчезает сама при отметке/снятии источника (см.
+    // preset/toggleSource -> reconcileJoins), вручную тут правятся только поля.
+    var joinRow = function (j, rightName, i, earlier) {
       var pick = function (value, options, onchange) {
         return el('select', { onchange: function (e) { onchange(e.target.value); } },
           [el('option', { value: '' }, '—')].concat(options.map(function (o) {
@@ -103,14 +108,13 @@
       }));
       return el('div', { class: 'join' },
         typeSelect,
-        pick(j.left, chosen, function (v) { d({ type: 'preset/updateJoin', index: i, patch: { left: v, left_field: '' } }); }),
+        pick(j.left, earlier, function (v) { d({ type: 'preset/updateJoin', index: i, patch: { left: v, left_field: '' } }); }),
         el('span', { class: 'dot' }, '.'),
         pick(j.left_field, fieldsOf(j.left), function (v) { d({ type: 'preset/updateJoin', index: i, patch: { left_field: v } }); }),
         el('span', { class: 'eq' }, '='),
-        pick(j.right, chosen, function (v) { d({ type: 'preset/updateJoin', index: i, patch: { right: v, right_field: '' } }); }),
+        el('span', { class: 'src-name' }, rightName),
         el('span', { class: 'dot' }, '.'),
-        pick(j.right_field, fieldsOf(j.right), function (v) { d({ type: 'preset/updateJoin', index: i, patch: { right_field: v } }); }),
-        el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeJoin', index: i }); } }, '✕')
+        pick(j.right_field, fieldsOf(rightName), function (v) { d({ type: 'preset/updateJoin', index: i, patch: { right_field: v } }); })
       );
     };
 
@@ -153,11 +157,14 @@
 
       chosen.length > 1 ? el('div', {},
         el('h2', {}, 'Связки между источниками'),
-        el('div', { class: 'joins' }, preset.view.joins.map(joinRow)),
-        el('button', { class: 'link', onclick: function () { d({ type: 'preset/addJoin' }); } }, '+ связка'),
+        el('div', { class: 'joins' }, chosen.slice(1).map(function (name, i) {
+          return joinRow(preset.view.joins[i], name, i, chosen.slice(0, i + 1));
+        })),
         el('p', { class: 'muted', style: 'margin:.3rem 0 0' },
-          'тип связки определяет, какие строки остаются без пары: левое — все строки левого '
-          + 'источника, правое — все строки правого, внутреннее — только совпавшие, полное — все')
+          'каждый следующий источник присоединяется к уже накопленному множеству (как в SQL) — '
+          + 'слева выбирается любой из ранее включённых источников; тип связки определяет, какие '
+          + 'строки остаются без пары: левое — все строки левого источника, правое — все строки '
+          + 'правого, внутреннее — только совпавшие, полное — все')
       ) : null,
 
       pickedColumns.length ? el('div', {},
