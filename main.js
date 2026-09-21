@@ -230,13 +230,21 @@
     // читаем сохранённое ДО первого полноценного render — иначе он перезапишет
     // ключи текущим (ещё дефолтным) состоянием
     var saved = storage.get('preset');
+    var manifest = (boot && boot.manifest) || { sources: [] };
 
     store.dispatch({
       type: 'manifest/loaded',
-      manifest: (boot && boot.manifest) || { sources: [] },
+      manifest: manifest,
       dataDir: boot ? boot.dataDir : null
     });
-    store.dispatch({ type: 'preset/set', preset: saved || basePreset() });
+    // localStorage общий на весь file://-источник и не привязан к конкретному
+    // data/ каталогу: сохранённый пресет может быть от другого набора данных
+    // (сменили демку/каталог) и ссылаться на источники, которых тут нет —
+    // тогда вместо ошибки "не загрузились источники" при первой сборке молча
+    // откатываемся к пресету каталога (data/base.js) или пустому.
+    var savedFitsManifest = saved && Object.keys((saved.query && saved.query.sources) || {})
+      .every(function (n) { return manifestSource({ manifest: manifest }, n); });
+    store.dispatch({ type: 'preset/set', preset: savedFitsManifest ? saved : basePreset() });
     // применить пресет по умолчанию и сразу открыть таблицу; при ошибке
     // (нет данных / нет источника) buildDataset оставит пользователя в конструкторе
     buildDataset(store);
