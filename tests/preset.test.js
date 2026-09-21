@@ -89,6 +89,26 @@ test('preset/setAsOf: нераспознанный ввод не меняет п
   assert.equal(next.preset.query.as_of, 1706745600);
 });
 
+// preset/toggleSource: включение источника выбирает по умолчанию только ключ
+// (не все показатели) — их бывает по сотне, снимать вручную лишние неудобно
+test('reducer: preset/toggleSource включает только ключ источника по умолчанию', () => {
+  const state = Object.assign({}, App.initialState, {
+    manifest: { sources: [{ name: 'CRM', key: 'id', labels: ['name', 'email', 'phone'] }] },
+    preset: App.normalizePreset({})
+  });
+  const next = App.reducer(state, { type: 'preset/toggleSource', name: 'CRM' });
+  assert.deepEqual(next.preset.query.sources.CRM.labels, ['id']);
+});
+
+test('reducer: preset/toggleSource выключает источник обратно', () => {
+  const state = Object.assign({}, App.initialState, {
+    manifest: { sources: [{ name: 'CRM', key: 'id', labels: ['name'] }] },
+    preset: App.normalizePreset({ query: { sources: { CRM: { labels: ['id'] } } } })
+  });
+  const next = App.reducer(state, { type: 'preset/toggleSource', name: 'CRM' });
+  assert.equal(next.preset.query.sources.CRM, undefined);
+});
+
 // «Экспорт» и «Расширенный фильтр» — взаимоисключающие области над таблицей
 test('export/toggle: открытие экспорта закрывает уже открытый расширенный фильтр', () => {
   const withFilter = App.reducer(App.initialState, { type: 'adv/toggle' });

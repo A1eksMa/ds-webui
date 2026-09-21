@@ -163,8 +163,10 @@
         } else {
           var ms = manifestSource(state, a.name);
           next = Object.assign({}, sources);
-          // по умолчанию: ключ + все показатели
-          next[a.name] = { labels: ms ? [ms.key].concat(ms.labels) : null };
+          // по умолчанию: только ключ (участвует в срезе для JOIN между источниками) —
+          // у источников бывает по сотне показателей, включать все сразу и заставлять
+          // пользователя вручную снимать лишние неудобно
+          next[a.name] = { labels: ms ? [ms.key] : null };
         }
         return setIn(state, ['preset', 'query', 'sources'], next);
       }
