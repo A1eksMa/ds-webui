@@ -3,7 +3,7 @@
 // Store: фабрика createStore (reducer + dispatch + subscribe), селекторы
 // состояния, нормализация пресета, редьюсер, (де)сериализация пресета в файл.
 // Зависит от util.js (omit/setIn/_swap), dataset.js (OP_IDS/JOIN_TYPE_IDS),
-// entities.js (normalizeEntities/mergeEntity/_entityColumns/parseDate),
+// entities.js (normalizeEntities/mergeEntity/_entityColumns),
 // effects.js (download/readFile).
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
@@ -19,7 +19,7 @@
   var omit = Util.omit, setIn = Util.setIn, _swap = Util._swap;
   var OP_IDS = Dataset.OP_IDS, JOIN_TYPE_IDS = Dataset.JOIN_TYPE_IDS;
   var normalizeEntities = Entities.normalizeEntities, mergeEntity = Entities.mergeEntity,
-      _entityColumns = Entities._entityColumns, parseDate = Entities.parseDate;
+      _entityColumns = Entities._entityColumns;
   var download = Effects.download, readFile = Effects.readFile;
 
   var isStale = function (ms) { return ms.db_max_cnt > ms.gen_max_cnt; };
@@ -193,17 +193,6 @@
         if (a.width == null || !isFinite(wv) || wv <= 0) delete cw[a.column];
         else cw[a.column] = Math.round(wv);
         return setIn(state, ['preset', 'view', 'column_widths'], cw);
-      }
-
-      case 'preset/setAsOf': {
-        // Принимает то же, что parseDate('auto'): дату, дату-время (с секундами
-        // или без), unix-время; миллисекунды в дате/unix — усекаются (as_of у ds
-        // секундной точности). Нераспознанный ввод — не трогаем прежнее значение.
-        var raw = String(a.value == null ? '' : a.value).trim();
-        if (raw === '') return setIn(state, ['preset', 'query', 'as_of'], null);
-        var parsed = parseDate(raw, 'auto');
-        if (!parsed.ok) return state;
-        return setIn(state, ['preset', 'query', 'as_of'], Math.round(parsed.ms / 1000));
       }
 
       case 'preset/addJoin': {

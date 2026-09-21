@@ -146,19 +146,6 @@
     return el('section', { class: 'page build' },
       el('h1', {}, 'Конструктор выборки'),
 
-      el('div', { class: 'row' },
-        el('label', { class: 'field' }, 'Срез (as_of; дата или дата-время, пусто = текущий момент)',
-          el('input', {
-            type: 'text', value: preset.query.as_of == null ? '' : String(preset.query.as_of),
-            placeholder: 'например: 2024-02-01 14:30',
-            onchange: function (e) { d({ type: 'preset/setAsOf', value: e.target.value }); }
-          })
-        ),
-        preset.query.as_of != null
-          ? el('span', { class: 'muted' }, '= ' + fmtDate(preset.query.as_of))
-          : null
-      ),
-
       el('h2', {}, 'Источники и показатели'),
       mSources.length
         ? el('div', { class: 'src-list' }, mSources.map(sourceRow))
