@@ -93,6 +93,13 @@
     });
     return {
       name: typeof raw.name === 'string' ? raw.name : 'preset',
+      // Человекочитаемый заголовок страницы «Таблица» (viewNav, view-common.js).
+      // Отдельно от `name` (который уходит в имя файла при скачивании) — можно
+      // поправить прямо в сохранённом .json текстовым редактором, не трогая имя
+      // файла. По умолчанию пусто (не "preset" и не имя файла) -- нулевой
+      // пресет без единого выбранного источника не должен показывать никакой
+      // заголовок.
+      description: typeof raw.description === 'string' ? raw.description : '',
       query: {
         as_of: query.as_of == null ? null : Number(query.as_of),
         sources: normSources
@@ -178,6 +185,9 @@
 
       case 'preset/setName':
         return setIn(state, ['preset', 'name'], String(a.value == null ? '' : a.value));
+
+      case 'preset/setDescription':
+        return setIn(state, ['preset', 'description'], String(a.value == null ? '' : a.value));
 
       case 'preset/toggleSource': {
         var sources = state.preset.query.sources;

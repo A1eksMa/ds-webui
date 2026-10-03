@@ -36,6 +36,7 @@ GENERATED_AT = 1706750000.0  # pinned so the committed sample has a stable diff
 # below. Written to sample-data/base.js as window.DS_BASE_PRESET.
 BASE_PRESET = {
     "name": "base",
+    "description": "CRM + ERP — демо-пример",
     "query": {
         "as_of": None,
         "sources": {
@@ -79,6 +80,14 @@ SOURCE_LABEL_TYPES = {
     "ERP": {"price": "number", "stock": "number"},
 }
 
+# Top-level source.json "description" -- read back below into manifest.js's
+# description, same path as SOURCE_LABEL_TYPES -> label_types (ds-loader 0.6.0a1,
+# see ds-loader/docs/reference/publish-output.md#manifestjs).
+SOURCE_DESCRIPTIONS = {
+    "CRM": "CRM: клиенты и контакты, выгрузка из облачной CRM раз в сутки",
+    "ERP": "ERP: цены и остатки по SKU, выгрузка из учётной системы раз в сутки",
+}
+
 
 def source(name, key_label):
     d = work / name
@@ -87,9 +96,10 @@ def source(name, key_label):
         {"name": n, "type": t, "publish": True}
         for n, t in SOURCE_LABEL_TYPES.get(name, {}).items()
     ]
-    (d / "source.json").write_text(json.dumps({
-        "name": name, "key_label": key_label, "labels": labels,
-    }))
+    doc = {"name": name, "key_label": key_label, "labels": labels}
+    if name in SOURCE_DESCRIPTIONS:
+        doc["description"] = SOURCE_DESCRIPTIONS[name]
+    (d / "source.json").write_text(json.dumps(doc))
     return d
 
 
@@ -185,6 +195,7 @@ for jf in sorted(gen_dir.glob("*.json")):
         "name": name,
         "file": f"{name}.js",
         "key": payload["meta"]["key"],
+        "description": SOURCE_DESCRIPTIONS.get(name),
         "as_of": payload["meta"]["as_of"],
         "generated_at": GENERATED_AT,
         "gen_max_cnt": payload["meta"]["gen_max_cnt"],   # cnt watermark of the shipped file

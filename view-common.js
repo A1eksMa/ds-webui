@@ -166,8 +166,11 @@
             class: 'gear', onclick: function () { d({ type: 'route/set', route: 'build' }); }
           }, 'К настройкам →')
         ];
+    // Заголовок — описание текущего пресета (preset.description), не название
+    // приложения: нулевой пресет (ничего не выбрано) показывает пустую строку,
+    // не плейсхолдер — см. store.js::normalizePreset.
     return el('header', { class: 'nav' },
-      el('strong', {}, 'План v4.20'),
+      el('strong', {}, (state.preset && state.preset.description) || ''),
       el('span', { class: 'spacer' }),
       menu
     );

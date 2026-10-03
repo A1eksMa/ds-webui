@@ -55,6 +55,7 @@
         );
       };
       return el('div', { class: 'src' + (picked ? ' picked' : '') },
+        ms.description ? el('div', { class: 'src-description' }, ms.description) : null,
         el('div', { class: 'src-head' },
           el('button', {
             type: 'button', class: 'src-fold', disabled: !picked,
@@ -180,7 +181,26 @@
           class: 'primary', disabled: state.building || !chosen.length,
           onclick: function () { window.DS_APP.buildDataset(window.DS_APP.store); }
         }, state.building ? 'Строю…' : 'Применить и открыть таблицу'),
-        el('button', { onclick: function () { savePreset(state.preset); } }, 'Скачать пресет'),
+        el('button', {
+          onclick: function () {
+            // «Save As»: имя файла -> описание (по умолчанию — только что введённое
+            // имя; открыть сохранённый .json текстовым редактором и поправить —
+            // штатный способ задать более развёрнутое описание отдельно от имени).
+            // Отмена первого запроса — не сохраняем вовсе; отмена второго — описание
+            // остаётся равным имени, сохранение всё равно происходит.
+            var defaultName = preset.name || 'preset';
+            var name = window.prompt('Имя файла пресета:', defaultName);
+            if (name == null) return;
+            name = name.trim() || defaultName;
+            var description = window.prompt(
+              'Описание пресета (показывается заголовком на странице «Таблица»):', name
+            );
+            if (description == null) description = name;
+            d({ type: 'preset/setName', value: name });
+            d({ type: 'preset/setDescription', value: description });
+            savePreset(Object.assign({}, preset, { name: name, description: description }));
+          }
+        }, 'Скачать пресет'),
         el('label', { class: 'file-btn' }, 'Загрузить пресет',
           el('input', {
             type: 'file', accept: '.json,application/json',

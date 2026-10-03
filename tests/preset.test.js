@@ -15,6 +15,21 @@ test('normalizePreset: пустой объект -> валидная дефол�
   assert.deepEqual(p.view.joins, []);
 });
 
+// description — заголовок страницы «Таблица» (viewNav, view-common.js), отдельно
+// от name (имя файла при скачивании). Нулевой пресет -> пусто, не плейсхолдер.
+test('normalizePreset: description по умолчанию — пустая строка', () => {
+  assert.equal(App.normalizePreset({}).description, '');
+});
+
+test('normalizePreset: description сохраняется как есть, если задан строкой', () => {
+  const p = App.normalizePreset({ description: 'Отчёт по клиентам за январь' });
+  assert.equal(p.description, 'Отчёт по клиентам за январь');
+});
+
+test('normalizePreset: нестроковый description игнорируется -> пустая строка', () => {
+  assert.equal(App.normalizePreset({ description: 42 }).description, '');
+});
+
 // entityConditions — второй проход фильтрации (по индикаторам, после расчёта),
 // независимый список от conditions (по сырым полям, до расчёта) — см. view-build.js/
 // view-entities.js
@@ -118,6 +133,29 @@ test('reducer: route/set меняет текущий маршрут', () => {
 test('reducer: неизвестный тип действия не меняет состояние', () => {
   const next = App.reducer(App.initialState, { type: 'unknown/whatever' });
   assert.equal(next, App.initialState);
+});
+
+test('reducer: preset/setName задаёт имя пресета', () => {
+  const state = Object.assign({}, App.initialState, { preset: App.normalizePreset({}) });
+  const next = App.reducer(state, { type: 'preset/setName', value: 'январь-2026' });
+  assert.equal(next.preset.name, 'январь-2026');
+});
+
+// description — заголовок «Таблицы» (viewNav), независим от name (имя файла) —
+// кнопка «Скачать пресет» (view-build.js) задаёт оба по отдельному запросу.
+test('reducer: preset/setDescription задаёт описание независимо от name', () => {
+  const state = Object.assign({}, App.initialState, {
+    preset: Object.assign({}, App.normalizePreset({}), { name: 'jan-2026' }),
+  });
+  const next = App.reducer(state, { type: 'preset/setDescription', value: 'Отчёт за январь' });
+  assert.equal(next.preset.description, 'Отчёт за январь');
+  assert.equal(next.preset.name, 'jan-2026');   // не затронуто
+});
+
+test('reducer: preset/setDescription с null -> пустая строка', () => {
+  const state = Object.assign({}, App.initialState, { preset: App.normalizePreset({}) });
+  const next = App.reducer(state, { type: 'preset/setDescription', value: null });
+  assert.equal(next.preset.description, '');
 });
 
 // preset/toggleSource: включение источника выбирает по умолчанию только ключ

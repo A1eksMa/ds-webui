@@ -133,6 +133,7 @@ input[type=text], select {
 .src-list { display: flex; flex-direction: column; gap: .4rem; }
 .src { border: 1px solid var(--border); border-radius: 8px; padding: .5rem .7rem; }
 .src.picked { border-color: var(--accent); }
+.src-description { color: var(--muted); font-size: .92em; margin-bottom: .25rem; }
 .src-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 .src-pick { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; }
 .src-fold, .sec-fold {

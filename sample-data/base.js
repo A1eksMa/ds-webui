@@ -2,6 +2,7 @@
 // Пресет по умолчанию для sample-data. Формат — docs/contract.md "Пресет".
 window.DS_BASE_PRESET = {
   "name": "base",
+  "description": "CRM + ERP — демо-пример",
   "query": {
     "as_of": null,
     "sources": {
