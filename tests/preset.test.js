@@ -159,6 +159,36 @@ test('reducer: preset/addFieldEntity не блокирует повторное 
   assert.equal(next.preset.view.entities[1].from.column, 'CRM.id');
 });
 
+// label_types из манифеста -> дефолтный тип нового индикатора (вместо жёсткого
+// "text"), сразу в обеих точках создания — см. entities.js::columnType.
+test('reducer: preset/addFieldEntity берёт тип показателя из манифеста', () => {
+  const preset = App.normalizePreset({ query: { sources: { CRM: { labels: ['revenue'] } } } });
+  const state = Object.assign({}, App.initialState, {
+    preset: preset,
+    manifest: { sources: [{ name: 'CRM', key: 'id', labels: ['revenue'], label_types: { revenue: 'number' } }] }
+  });
+  const next = App.reducer(state, { type: 'preset/addFieldEntity', column: 'revenue' });
+  assert.equal(next.preset.view.entities[0].type, 'number');
+});
+
+test('reducer: preset/addEntity берёт тип первого свободного показателя из манифеста', () => {
+  const preset = App.normalizePreset({ query: { sources: { CRM: { labels: ['signed_at'] } } } });
+  const state = Object.assign({}, App.initialState, {
+    preset: preset,
+    manifest: { sources: [{ name: 'CRM', key: 'id', labels: ['signed_at'], label_types: { signed_at: 'date' } }] }
+  });
+  const next = App.reducer(state, { type: 'preset/addEntity' });
+  assert.equal(next.preset.view.entities[0].from.column, 'signed_at');
+  assert.equal(next.preset.view.entities[0].type, 'date');
+});
+
+test('reducer: preset/addEntity без манифеста по-прежнему "text" (не падает)', () => {
+  const preset = App.normalizePreset({ query: { sources: { CRM: { labels: ['revenue'] } } } });
+  const state = Object.assign({}, App.initialState, { preset: preset });   // manifest: null
+  const next = App.reducer(state, { type: 'preset/addEntity' });
+  assert.equal(next.preset.view.entities[0].type, 'text');
+});
+
 // условия «Индикаторов» — свой независимый список, свои экшены
 test('reducer: preset/addEntityCondition / updateEntityCondition / removeEntityCondition', () => {
   const preset = App.normalizePreset({});

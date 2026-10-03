@@ -19,7 +19,7 @@
   var omit = Util.omit, setIn = Util.setIn, _swap = Util._swap;
   var OP_IDS = Dataset.OP_IDS, JOIN_TYPE_IDS = Dataset.JOIN_TYPE_IDS;
   var normalizeEntities = Entities.normalizeEntities, mergeEntity = Entities.mergeEntity,
-      _entityColumns = Entities._entityColumns;
+      _entityColumns = Entities._entityColumns, columnType = Entities.columnType;
   var download = Effects.download, readFile = Effects.readFile;
 
   var isStale = function (ms) { return ms.db_max_cnt > ms.gen_max_cnt; };
@@ -262,19 +262,23 @@
       case 'preset/addEntity': {
         var ec = _entityColumns(state.preset);
         var free = ec.all.filter(function (c) { return !ec.used[c]; })[0] || '';
+        var freeType = free ? columnType(state.preset, state.manifest && state.manifest.sources, free) : 'text';
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat([
-          { name: free, type: 'text', hidden: false, from: { kind: 'field', column: free } }
+          { name: free, type: freeType, hidden: false, from: { kind: 'field', column: free } }
         ]));
       }
 
       // «+ показатель источника» на «Индикаторах»: добавить поле как есть (без
-      // типизации/переименования). Нарочно без проверки на «уже занято» — можно
+      // переименования, но с типом по умолчанию из манифеста — label_types, см.
+      // entities.js::columnType). Нарочно без проверки на «уже занято» — можно
       // добавить одно и то же поле повторно или рядом с индикатором на его основе
       // (например: сырое поле для вида + производный индикатор для фильтра/расчёта)
-      case 'preset/addFieldEntity':
+      case 'preset/addFieldEntity': {
+        var fieldType = columnType(state.preset, state.manifest && state.manifest.sources, a.column);
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat([
-          { name: a.column, type: 'text', hidden: false, from: { kind: 'field', column: a.column } }
+          { name: a.column, type: fieldType, hidden: false, from: { kind: 'field', column: a.column } }
         ]));
+      }
 
       case 'preset/updateEntity':
         return setIn(state, ['preset', 'view', 'entities'],

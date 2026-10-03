@@ -68,10 +68,28 @@ def ds(*args):
     )
 
 
+# label -> type, mirrors a real source.json's labels[] (ds/docs/reference/config-format.md).
+# Read back below to build manifest.js's label_types, same as ds-loader's
+# manifest_entry() -- see ds-loader/docs/reference/config.md#manifest. Not used by `ds
+# load` itself (type/publish are ds-loader/ds-webui concerns, not core); written to
+# source.json purely so this generator stays a faithful reference of what a real
+# ds-loader deployment would read (docs/contract.md calls this script that).
+SOURCE_LABEL_TYPES = {
+    "CRM": {"email": "text", "phone": "text", "status": "text"},
+    "ERP": {"price": "number", "stock": "number"},
+}
+
+
 def source(name, key_label):
     d = work / name
     d.mkdir(parents=True, exist_ok=True)
-    (d / "source.json").write_text(json.dumps({"name": name, "key_label": key_label}))
+    labels = [
+        {"name": n, "type": t, "publish": True}
+        for n, t in SOURCE_LABEL_TYPES.get(name, {}).items()
+    ]
+    (d / "source.json").write_text(json.dumps({
+        "name": name, "key_label": key_label, "labels": labels,
+    }))
     return d
 
 
@@ -173,6 +191,10 @@ for jf in sorted(gen_dir.glob("*.json")):
         "db_max_cnt": src_max_cnt(name),                 # this source's current max in the DB
         "rows": payload["meta"]["rows"],
         "labels": payload["meta"]["labels"],
+        "label_types": {
+            l: SOURCE_LABEL_TYPES.get(name, {}).get(l, "text")
+            for l in payload["meta"]["labels"]
+        },
     })
 
 (OUT / "manifest.js").write_text(

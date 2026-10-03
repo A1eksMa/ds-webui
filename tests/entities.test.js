@@ -117,3 +117,60 @@ test('entityOutNames: дедуплицирует одинаковые имена
   const entities = [{ name: 'a' }, { name: 'a' }, { name: 'a' }];
   assert.deepEqual(App.entityOutNames(entities), ['a', 'a (2)', 'a (3)']);
 });
+
+// implicitEntities: дефолтные индикаторы при пустом пресете (main.js::buildDataset).
+// Тип берётся из манифеста (label_types), не всегда "text" — см.
+// ds-loader/docs/reference/config.md#manifest.
+test('implicitEntities: без columnTypes всё "text" (обратная совместимость)', () => {
+  assert.deepEqual(App.implicitEntities(['a', 'b']), [
+    { name: 'a', type: 'text', from: { kind: 'field', column: 'a' } },
+    { name: 'b', type: 'text', from: { kind: 'field', column: 'b' } }
+  ]);
+});
+
+test('implicitEntities: берёт тип из columnTypes, неизвестная колонка -> "text"', () => {
+  const ents = App.implicitEntities(['revenue', 'note'], { revenue: 'number' });
+  assert.equal(ents[0].type, 'number');
+  assert.equal(ents[1].type, 'text');
+});
+
+// columnTypesFor: {источник: [показатель]} + manifest.sources -> {колонка: type}.
+// Квалификация имён ("Источник.показатель") должна совпасть с joinSources/presetColumns.
+test('columnTypesFor: один источник -> голые имена колонок', () => {
+  const types = App.columnTypesFor(
+    { CRM: ['revenue', 'signed_at'] },
+    [{ name: 'CRM', label_types: { revenue: 'number', signed_at: 'date' } }]
+  );
+  assert.deepEqual(types, { revenue: 'number', signed_at: 'date' });
+});
+
+test('columnTypesFor: несколько источников -> "Источник.показатель"', () => {
+  const types = App.columnTypesFor(
+    { CRM: ['revenue'], ERP: ['price'] },
+    [
+      { name: 'CRM', label_types: { revenue: 'number' } },
+      { name: 'ERP', label_types: { price: 'number' } }
+    ]
+  );
+  assert.deepEqual(types, { 'CRM.revenue': 'number', 'ERP.price': 'number' });
+});
+
+test('columnTypesFor: показатель без записи в манифесте (ключ, не опубликован) -> "text"', () => {
+  const types = App.columnTypesFor(
+    { CRM: ['customer_id', 'revenue'] },
+    [{ name: 'CRM', label_types: { revenue: 'number' } }]
+  );
+  assert.deepEqual(types, { customer_id: 'text', revenue: 'number' });
+});
+
+test('columnTypesFor: манифест ещё не загружен (null/undefined) -> всё "text"', () => {
+  assert.deepEqual(App.columnTypesFor({ CRM: ['revenue'] }, null), { revenue: 'text' });
+});
+
+// columnType: та же логика, но по пресету напрямую (store.js'а редьюсеры «+
+// индикатор» / «+ показатель источника» ещё не прогнали JOIN).
+test('columnType: находит тип по preset.query.sources + manifest.sources', () => {
+  const preset = { query: { sources: { CRM: { labels: ['revenue'] } } } };
+  const type = App.columnType(preset, [{ name: 'CRM', label_types: { revenue: 'number' } }], 'revenue');
+  assert.equal(type, 'number');
+});

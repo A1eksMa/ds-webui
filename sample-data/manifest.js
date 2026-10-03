@@ -18,7 +18,12 @@ window.DS_MANIFEST = {
         "email",
         "phone",
         "status"
-      ]
+      ],
+      "label_types": {
+        "email": "text",
+        "phone": "text",
+        "status": "text"
+      }
     },
     {
       "name": "ERP",
@@ -32,7 +37,11 @@ window.DS_MANIFEST = {
       "labels": [
         "price",
         "stock"
-      ]
+      ],
+      "label_types": {
+        "price": "number",
+        "stock": "number"
+      }
     }
   ]
 };

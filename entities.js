@@ -219,9 +219,10 @@
     return jrow[from.column];   // kind === 'field'
   };
 
-  var implicitEntities = function (columns) {
+  var implicitEntities = function (columns, columnTypes) {
+    var types = columnTypes || {};
     return columns.map(function (c) {
-      return { name: c, type: 'text', from: { kind: 'field', column: c } };
+      return { name: c, type: types[c] || 'text', from: { kind: 'field', column: c } };
     });
   };
 
@@ -278,6 +279,37 @@
       });
     });
     return out;
+  };
+
+  // {источник: [показатель,...]} + manifest.sources -> {колонка: type}. Та же схема
+  // квалификации имён, что presetColumns/joinSources ("Источник.показатель" при >1
+  // источника, иначе голое имя) — иначе типы не совпадут со столбцами. Ключевая
+  // колонка и показатель, которого ещё нет в манифесте (не опубликован источником,
+  // манифест не загружен) -> "text" по умолчанию (см.
+  // ds-loader/docs/reference/config.md#manifest -> label_types).
+  var columnTypesFor = function (sourceLabels, manifestSources) {
+    var names = Object.keys(sourceLabels);
+    var multi = names.length > 1;
+    var sources = manifestSources || [];
+    var out = {};
+    names.forEach(function (n) {
+      var ms = sources.find(function (s) { return s.name === n; });
+      var types = (ms && ms.label_types) || {};
+      (sourceLabels[n] || []).forEach(function (l) {
+        out[multi ? n + '.' + l : l] = types[l] || 'text';
+      });
+    });
+    return out;
+  };
+
+  // Тип одной колонки по пресету (без JOIN/живых данных) — для дефолтов в редьюсере
+  // store.js при добавлении индикатора (аналог presetColumns для типов).
+  var columnType = function (preset, manifestSources, column) {
+    var sourceLabels = {};
+    Object.keys(preset.query.sources).forEach(function (n) {
+      sourceLabels[n] = preset.query.sources[n].labels || [];
+    });
+    return columnTypesFor(sourceLabels, manifestSources)[column] || 'text';
   };
 
   var _entityColumns = function (preset) {
@@ -355,7 +387,7 @@
     typeCell: typeCell, resolveCell: resolveCell, implicitEntities: implicitEntities,
     entityOutNames: entityOutNames, resolveEntities: resolveEntities, parseTypes: parseTypes,
     presetColumns: presetColumns, _entityColumns: _entityColumns, mergeEntity: mergeEntity,
-    normalizeEntities: normalizeEntities
+    normalizeEntities: normalizeEntities, columnTypesFor: columnTypesFor, columnType: columnType
   };
 
   if (typeof module !== 'undefined' && module.exports) {

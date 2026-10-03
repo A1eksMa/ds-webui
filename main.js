@@ -20,7 +20,7 @@
       visibleColumns = App.visibleColumns, applyAdvanced = App.applyAdvanced,
       applyFilters = App.applyFilters, applySort = App.applySort;
   var implicitEntities = App.implicitEntities, resolveEntities = App.resolveEntities,
-      parseTypes = App.parseTypes, colWidthPx = App.colWidthPx;
+      parseTypes = App.parseTypes, colWidthPx = App.colWidthPx, columnTypesFor = App.columnTypesFor;
   var toCsv = App.toCsv, toXlsWorkbook = App.toXlsWorkbook, exportFilename = App.exportFilename;
   var viewNav = App.viewNav, viewFooter = App.viewFooter, viewBuild = App.viewBuild,
       viewEntities = App.viewEntities, viewTableShell = App.viewTableShell,
@@ -75,9 +75,12 @@
       // первый проход: условия «Настроек» — по сырым полям источников, сразу после
       // JOIN, до расчёта индикаторов (см. view-build.js)
       var sliced = applyConditions(joined, state.preset.view.conditions || []);
+      var sourceLabels = {};
+      selected.forEach(function (s) { sourceLabels[s.name] = s.labels; });
+      var columnTypes = columnTypesFor(sourceLabels, state.manifest.sources);
       var ents = state.preset.view.entities.length
         ? state.preset.view.entities
-        : implicitEntities(sliced.columns);
+        : implicitEntities(sliced.columns, columnTypes);
       var re = resolveEntities(sliced, ents);
       var typed = parseTypes(re, ents, re.columns);
       // второй проход: условия «Индикаторов» — по именам индикаторов, после расчёта
