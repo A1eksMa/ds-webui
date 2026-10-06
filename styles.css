@@ -303,24 +303,65 @@ table.data thead th {
    под фильтр резервируем через --filter-h (реальная высота, измеренная в
    renderGrid), а не гадаем в rem. */
 table.data .col-name { font-weight: 600; padding-bottom: var(--filter-h, 2rem); }
-table.data .col-filter-field {
-  position: absolute; left: .5rem; right: .5rem; bottom: .3rem;
-  display: flex; align-items: stretch; overflow: hidden;
+
+/* Строка из трёх пиктограмм (поиск/фильтр/сортировка) под именем столбца --
+   та же привязка ко дну ячейки, что раньше была у поля фильтра (см. комментарий
+   выше про --filter-h), но сама строка компактная и ничего не плавает. */
+table.data .col-icons {
+  position: absolute; left: .5rem; bottom: .3rem;
+  display: flex; gap: .15rem;
 }
-table.data .col-filter { width: 100%; min-width: 0; font-size: .9em; padding-right: 1.7rem; }
-table.data .col-filter-apply {
+table.data .col-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.4rem; height: 1.4rem; padding: 0; border: none; border-radius: 4px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+table.data .col-icon:hover { color: var(--accent); background: var(--head-bg); }
+table.data .col-icon.active { color: var(--accent-fg); background: var(--accent); }
+table.data .col-icon.set:not(.active) { color: var(--accent); }
+table.data .col-icon svg { display: block; }
+
+/* Quick-панель (поиск ИЛИ фильтр, один и тот же компонент, см.
+   ViewCommon.quickValueInput) -- плавающий оверлей НАД строками таблицы, не
+   участвует в --filter-h (может быть выше, чем зарезервированное место в
+   заголовке, из-за выпадающего списка значений под полем). */
+table.data .quick-panel {
+  position: absolute; left: .5rem; right: .5rem; top: 100%; z-index: 10;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .15); padding: .3rem; margin-top: .15rem;
+}
+table.data .quick-input-field { display: flex; align-items: stretch; position: relative; }
+table.data .quick-input { width: 100%; min-width: 0; font-size: .9em; padding-right: 1.7rem; }
+table.data .quick-input-apply {
   position: absolute; right: 1px; top: 1px; bottom: 1px; width: 1.55rem;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0; border: none; border-radius: 0 4px 4px 0;
   background: transparent; color: var(--muted); cursor: pointer;
 }
-table.data .col-filter-apply:hover:not(:disabled) {
+table.data .quick-input-apply:hover:not(:disabled) {
   border: none; color: var(--accent); background: var(--head-bg);
 }
-table.data .col-filter-apply svg { display: block; }
-table.data .col-filter-field.dirty .col-filter { border-color: var(--accent); }
-table.data .col-filter-field.dirty .col-filter-apply { color: var(--accent); }
+table.data .quick-input-apply svg { display: block; }
+table.data .quick-input-field.dirty .quick-input { border-color: var(--accent); }
+table.data .quick-input-field.dirty .quick-input-apply { color: var(--accent); }
+table.data .quick-values {
+  display: flex; flex-direction: column; max-height: 10rem; overflow-y: auto;
+  margin-top: .3rem; border-top: 1px solid var(--border);
+}
+table.data .quick-values-item {
+  text-align: left; border: none; background: transparent; color: var(--fg);
+  padding: .25rem .3rem; cursor: pointer; font-size: .85em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+table.data .quick-values-item:hover { background: var(--head-bg); color: var(--accent); }
+table.data .quick-values-limit {
+  display: flex; align-items: center; gap: .3rem; margin-top: .3rem;
+  font-size: .8em; color: var(--muted);
+}
+table.data .quick-values-limit-input { width: 3.5rem; font-size: 1em; }
 table.data tbody tr:nth-child(even) { background: var(--row-alt); }
+/* Короткая подсветка строки, к которой перешёл поиск по столбцу */
+table.data tbody tr.found { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); transition: background .3s; }
 table.data td.del { color: var(--del); font-style: italic; }
 table.data td.empty::after { content: ""; }
 table.data td.unparsed {

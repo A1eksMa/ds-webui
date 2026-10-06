@@ -267,3 +267,112 @@ test('export/toggle: закрытие экспорта не трогает (уж
   assert.equal(closed.exportOpen, false);
   assert.equal(closed.advOpen, false);
 });
+
+// --- sort/* -- расширенная панель: многоуровневый редактор state.sortBy,
+// тот же список, который быстро дополняют пиктограммы (quick/sort ниже) ---
+
+test('reducer: sort/add добавляет пустой уровень сортировки', () => {
+  const next = App.reducer(App.initialState, { type: 'sort/add' });
+  assert.deepEqual(next.sortBy, [{ col: '', dir: 'asc' }]);
+});
+
+test('reducer: sort/update меняет столбец/направление уровня по индексу', () => {
+  const s1 = App.reducer(App.initialState, { type: 'sort/add' });
+  const s2 = App.reducer(s1, { type: 'sort/update', index: 0, patch: { col: 'a' } });
+  const s3 = App.reducer(s2, { type: 'sort/update', index: 0, patch: { dir: 'desc' } });
+  assert.deepEqual(s3.sortBy, [{ col: 'a', dir: 'desc' }]);
+});
+
+test('reducer: sort/remove убирает уровень по индексу', () => {
+  const s1 = App.reducer(App.initialState, { type: 'sort/add' });
+  const s2 = App.reducer(s1, { type: 'sort/add' });
+  const s3 = App.reducer(s2, { type: 'sort/remove', index: 0 });
+  assert.equal(s3.sortBy.length, 1);
+});
+
+test('reducer: sort/move меняет порядок (приоритет) двух уровней', () => {
+  const s1 = App.reducer(App.initialState, { type: 'sort/add' });
+  const s2 = App.reducer(s1, { type: 'sort/update', index: 0, patch: { col: 'a' } });
+  const s3 = App.reducer(s2, { type: 'sort/add' });
+  const s4 = App.reducer(s3, { type: 'sort/update', index: 1, patch: { col: 'b' } });
+  const s5 = App.reducer(s4, { type: 'sort/move', index: 1, dir: -1 });
+  assert.deepEqual(s5.sortBy.map((l) => l.col), ['b', 'a']);
+});
+
+// --- quick/* -- пиктограммы в заголовке таблицы: читают/пишут ТО ЖЕ состояние,
+// что редактирует расширенная панель (sortBy/adv), плюс своё UI-состояние
+// (quickOpen, quickValuesLimit) ---
+
+test('reducer: quick/toggle открывает quick-слот столбца, повторный клик закрывает', () => {
+  const opened = App.reducer(App.initialState, { type: 'quick/toggle', column: 'a', mode: 'filter' });
+  assert.equal(opened.quickOpen.a, 'filter');
+  const closed = App.reducer(opened, { type: 'quick/toggle', column: 'a', mode: 'filter' });
+  assert.equal(closed.quickOpen.a, null);
+});
+
+test('reducer: quick/toggle переключает режим столбца (search -> filter)', () => {
+  const s1 = App.reducer(App.initialState, { type: 'quick/toggle', column: 'a', mode: 'search' });
+  const s2 = App.reducer(s1, { type: 'quick/toggle', column: 'a', mode: 'filter' });
+  assert.equal(s2.quickOpen.a, 'filter');
+});
+
+test('reducer: quick/sort -- цикл по столбцу: нет записи -> asc -> desc -> убрать', () => {
+  const s1 = App.reducer(App.initialState, { type: 'quick/sort', column: 'a' });
+  assert.deepEqual(s1.sortBy, [{ col: 'a', dir: 'asc' }]);
+  const s2 = App.reducer(s1, { type: 'quick/sort', column: 'a' });
+  assert.deepEqual(s2.sortBy, [{ col: 'a', dir: 'desc' }]);
+  const s3 = App.reducer(s2, { type: 'quick/sort', column: 'a' });
+  assert.deepEqual(s3.sortBy, []);
+});
+
+test('reducer: quick/sort добавляет столбец в конец -- не трогает уже выставленные уровни', () => {
+  const s1 = App.reducer(App.initialState, { type: 'sort/add' });
+  const s2 = App.reducer(s1, { type: 'sort/update', index: 0, patch: { col: 'a' } });
+  const s3 = App.reducer(s2, { type: 'quick/sort', column: 'b' });
+  assert.deepEqual(s3.sortBy, [{ col: 'a', dir: 'asc' }, { col: 'b', dir: 'asc' }]);
+});
+
+test('reducer: quick/applyFilter добавляет contains-условие с conj="and" в state.adv', () => {
+  const next = App.reducer(App.initialState, { type: 'quick/applyFilter', column: 'a', value: 'foo' });
+  assert.deepEqual(next.adv, [{ field: 'a', op: 'contains', value: 'foo', conj: 'and' }]);
+});
+
+test('reducer: quick/applyFilter не трогает уже установленные условия расширенного фильтра', () => {
+  const s1 = App.reducer(App.initialState, { type: 'adv/add' });
+  const s2 = App.reducer(s1, { type: 'adv/update', index: 0, patch: { field: 'x', op: 'eq', value: '1' } });
+  const s3 = App.reducer(s2, { type: 'quick/applyFilter', column: 'a', value: 'foo' });
+  assert.equal(s3.adv.length, 2);
+  assert.deepEqual(s3.adv[0], { field: 'x', op: 'eq', value: '1', conj: 'and' });
+});
+
+test('reducer: quick/applyFilter повторно -- обновляет то же условие, не дублирует', () => {
+  const s1 = App.reducer(App.initialState, { type: 'quick/applyFilter', column: 'a', value: 'foo' });
+  const s2 = App.reducer(s1, { type: 'quick/applyFilter', column: 'a', value: 'bar' });
+  assert.equal(s2.adv.length, 1);
+  assert.equal(s2.adv[0].value, 'bar');
+});
+
+test('reducer: quick/applyFilter с пустым значением убирает условие', () => {
+  const s1 = App.reducer(App.initialState, { type: 'quick/applyFilter', column: 'a', value: 'foo' });
+  const s2 = App.reducer(s1, { type: 'quick/applyFilter', column: 'a', value: '' });
+  assert.deepEqual(s2.adv, []);
+});
+
+test('reducer: quick/setValuesLimit сохраняет неотрицательное целое (0 -- валидное значение)', () => {
+  const s1 = App.reducer(App.initialState, { type: 'quick/setValuesLimit', value: '5' });
+  assert.equal(s1.quickValuesLimit, 5);
+  const s2 = App.reducer(s1, { type: 'quick/setValuesLimit', value: '0' });
+  assert.equal(s2.quickValuesLimit, 0);
+  const s3 = App.reducer(s2, { type: 'quick/setValuesLimit', value: '-3' });
+  assert.equal(s3.quickValuesLimit, 0);
+});
+
+test('reducer: build/success сбрасывает adv/sortBy/quickOpen, но не quickValuesLimit', () => {
+  const withLimit = App.reducer(App.initialState, { type: 'quick/setValuesLimit', value: '3' });
+  const withStuff = App.reducer(withLimit, { type: 'sort/add' });
+  const next = App.reducer(withStuff, { type: 'build/success', dataset: { columns: [], rows: [] } });
+  assert.deepEqual(next.sortBy, []);
+  assert.deepEqual(next.adv, []);
+  assert.deepEqual(next.quickOpen, {});
+  assert.equal(next.quickValuesLimit, 3);
+});

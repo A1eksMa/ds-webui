@@ -87,6 +87,49 @@
     );
   };
 
+  // Поле ввода под пиктограммами «поиск»/«фильтр» в заголовке столбца
+  // (view-table.js): один и тот же визуальный компонент для обоих режимов --
+  // различается только applyIcon/applyTitle/placeholder и что делает onApply
+  // (поиск -- переход к строке, фильтр -- contains-условие в state.adv), как
+  // и попросил пользователь. Выпадающий список первых N уникальных значений
+  // столбца (opts.values, уже посчитан вызывающей стороной через
+  // Dataset.uniqueValues) + общая настройка "Показать N" под ним.
+  var quickValueInput = function (opts) {
+    var input = el('input', {
+      type: 'text', class: 'quick-input', value: opts.value || '',
+      placeholder: opts.placeholder, title: opts.title,
+      oninput: function (e) { if (opts.onInput) opts.onInput(e.target.value); },
+      onkeydown: function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); opts.onApply(e.target.value); }
+        else if (e.key === 'Escape' && opts.onEscape) { e.preventDefault(); opts.onEscape(); }
+      }
+    });
+    var field = el('div', { class: 'quick-input-field' + (opts.dirty ? ' dirty' : '') },
+      input,
+      el('button', {
+        type: 'button', class: 'quick-input-apply', html: opts.applyIcon, title: opts.applyTitle,
+        onclick: function () { opts.onApply(input.value); }
+      })
+    );
+    var dropdown = (opts.limit > 0 && opts.values && opts.values.length)
+      ? el('div', { class: 'quick-values' }, opts.values.map(function (v) {
+          return el('button', {
+            type: 'button', class: 'quick-values-item', title: v,
+            onclick: function () { opts.onApply(v); }
+          }, v);
+        }))
+      : null;
+    var limitRow = el('div', { class: 'quick-values-limit' },
+      'Показать ',
+      el('input', {
+        type: 'number', min: '0', step: '1', class: 'quick-values-limit-input',
+        value: String(opts.limit),
+        onchange: function (e) { opts.onLimitChange(e.target.value); }
+      })
+    );
+    return el('div', { class: 'quick-panel' }, field, dropdown, limitRow);
+  };
+
   // Пиктограмма-воронка — та же самая, что и у кнопки применения быстрого
   // фильтра колонки в view-table.js (переиспользуется оттуда через
   // ViewCommon.FUNNEL_SVG — единый визуальный язык «это про фильтр»).
@@ -112,6 +155,22 @@
     + '<rect x="1" y="9" width="3" height="5" rx=".5" fill="currentColor"/>'
     + '<rect x="6.5" y="5.5" width="3" height="8.5" rx=".5" fill="currentColor"/>'
     + '<rect x="12" y="2" width="3" height="12" rx=".5" fill="currentColor"/></svg>';
+
+  // Пиктограмма «поиск» — лупа, под заголовком столбца (view-table.js), тот же
+  // монохромный приём, что у воронки/экспорта/индикаторов.
+  var SEARCH_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">'
+    + '<circle cx="6.8" cy="6.8" r="4.3" fill="none" stroke="currentColor" stroke-width="1.4"/>'
+    + '<path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" '
+    + 'd="M10.2 10.2 14 14"/></svg>';
+
+  // Пиктограмма «сортировка» — две стрелки (возр./убыв.), под заголовком
+  // столбца; индикатор текущего направления (▲/▼) рисуется отдельно рядом
+  // (col-name, как и раньше), эта пиктограмма — сама кнопка-переключатель.
+  var SORT_SVG =
+    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">'
+    + '<path fill="currentColor" d="M4.5 1.5 7 5.3H2z"/>'
+    + '<path fill="currentColor" d="M11.5 14.5 9 10.7h5z"/></svg>';
 
   // Главное меню в навбаре. «Настройки» и «Индикаторы» — настоящие страницы
   // (полностью меняют вид экрана, это логично отдельными экранами): на
@@ -185,7 +244,8 @@
   };
 
   return {
-    opSelect: opSelect, valueControl: valueControl, viewNav: viewNav, viewFooter: viewFooter,
-    conditionsBlock: conditionsBlock, FUNNEL_SVG: FUNNEL_SVG
+    opSelect: opSelect, valueControl: valueControl, quickValueInput: quickValueInput,
+    viewNav: viewNav, viewFooter: viewFooter, conditionsBlock: conditionsBlock,
+    FUNNEL_SVG: FUNNEL_SVG, SEARCH_SVG: SEARCH_SVG, SORT_SVG: SORT_SVG
   };
 });

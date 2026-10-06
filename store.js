@@ -20,7 +20,7 @@
   var OP_IDS = Dataset.OP_IDS, JOIN_TYPE_IDS = Dataset.JOIN_TYPE_IDS;
   var normalizeEntities = Entities.normalizeEntities, mergeEntity = Entities.mergeEntity,
       _entityColumns = Entities._entityColumns, columnType = Entities.columnType;
-  var download = Effects.download, readFile = Effects.readFile;
+  var download = Effects.download, readFile = Effects.readFile, storage = Effects.storage;
 
   var isStale = function (ms) { return ms.db_max_cnt > ms.gen_max_cnt; };
 
@@ -159,14 +159,23 @@
     building: false,
     buildError: null,
     dataset: null,
-    tableFilters: {},
     groupBy: [],             // список полей группировки — применяются последовательно (вложенно)
     hideEmpty: false,
     expanded: {},
     srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
-    adv: [],                 // расширенный фильтр (транзиентный, не в пресете)
+    // расширенный фильтр и быстрые пиктограммы в заголовке таблицы читают/пишут
+    // ОДНО и то же состояние (adv/sortBy) — пиктограммы лишь быстро дополняют то,
+    // что полноценно редактируется в панели "Расширенный фильтр"; не в пресете.
+    adv: [],                 // условия отбора: {field, op, value, conj} -- И/ИЛИ между строками
     advOpen: false,          // область расширенного фильтра над таблицей развёрнута
-    sort: null,              // { col, dir: 'asc'|'desc' } | null — сортировка столбца
+    sortBy: [],              // [{ col, dir: 'asc'|'desc' }] -- порядок уровней = приоритет
+    quickOpen: {},           // { [column]: 'search'|'filter'|null } -- какой quick-слот открыт
+    // "Показать N" в выпадающем списке уникальных значений; 0 -- валидное значение
+    // (выключает список), поэтому не "|| 10", а явная проверка на число.
+    quickValuesLimit: (function () {
+      var saved = storage.get('quickValuesLimit');
+      return typeof saved === 'number' && isFinite(saved) && saved >= 0 ? saved : 10;
+    })(),
     exportFormat: 'xls',     // выбор формата в области экспорта ('xls' | 'csv')
     exportOpen: false        // область экспорта над таблицей развёрнута
   };
@@ -339,15 +348,10 @@
       case 'build/success':
         return Object.assign({}, state, {
           building: false, buildError: null, dataset: a.dataset,
-          tableFilters: {}, groupBy: [], hideEmpty: false, expanded: {},
-          adv: [], sort: null            // транзиентные слои сбрасываются при пересборке
+          groupBy: [], hideEmpty: false, expanded: {}, quickOpen: {},
+          adv: [], sortBy: []             // транзиентные слои сбрасываются при пересборке
+          // quickValuesLimit НЕ сбрасывается -- это настройка UI, не датасета
         });
-
-      case 'table/setFilter': {
-        var tf = Object.assign({}, state.tableFilters);
-        if (a.value) tf[a.column] = a.value; else delete tf[a.column];
-        return Object.assign({}, state, { tableFilters: tf });
-      }
 
       case 'group/add':
         return Object.assign({}, state, { groupBy: state.groupBy.concat(['']) });
@@ -388,12 +392,63 @@
       case 'table/collapseAll':
         return Object.assign({}, state, { expanded: {} });
 
-      case 'table/sort': {
-        var s = state.sort;
-        var next = (!s || s.col !== a.column) ? { col: a.column, dir: 'asc' }
-          : s.dir === 'asc' ? { col: a.column, dir: 'desc' }
-          : null;
-        return Object.assign({}, state, { sort: next });
+      // --- сортировка: расширенная панель (многоуровневый редактор) ---
+      // по образцу group/add|update|remove|move выше.
+      case 'sort/add':
+        return Object.assign({}, state, { sortBy: state.sortBy.concat([{ col: '', dir: 'asc' }]) });
+
+      case 'sort/update':
+        return Object.assign({}, state, {
+          sortBy: state.sortBy.map(function (s, i) { return i === a.index ? Object.assign({}, s, a.patch) : s; })
+        });
+
+      case 'sort/remove':
+        return Object.assign({}, state, {
+          sortBy: state.sortBy.filter(function (_, i) { return i !== a.index; })
+        });
+
+      case 'sort/move':
+        return Object.assign({}, state, { sortBy: _swap(state.sortBy, a.index, a.index + a.dir) });
+
+      // --- пиктограммы в заголовке таблицы: быстрый доступ к ОДНОМУ и тому же
+      // состоянию, что редактирует расширенная панель (adv/sortBy), плюс
+      // открытие/закрытие своего quick-слота ввода (поиск/фильтр). ---
+      case 'quick/toggle': {
+        var qo = Object.assign({}, state.quickOpen);
+        qo[a.column] = qo[a.column] === a.mode ? null : a.mode;
+        return Object.assign({}, state, { quickOpen: qo });
+      }
+
+      case 'quick/sort': {
+        var idx = state.sortBy.findIndex(function (s) { return s.col === a.column; });
+        var sb;
+        if (idx === -1) sb = state.sortBy.concat([{ col: a.column, dir: 'asc' }]);
+        else if (state.sortBy[idx].dir === 'asc') {
+          sb = state.sortBy.map(function (s, i) { return i === idx ? Object.assign({}, s, { dir: 'desc' }) : s; });
+        } else {
+          sb = state.sortBy.filter(function (_, i) { return i !== idx; });
+        }
+        return Object.assign({}, state, { sortBy: sb });
+      }
+
+      case 'quick/applyFilter': {
+        var i2 = state.adv.findIndex(function (c) { return c.field === a.column && c.op === 'contains'; });
+        var value = a.value == null ? '' : String(a.value);
+        var adv;
+        if (!value.trim()) {
+          adv = i2 === -1 ? state.adv : state.adv.filter(function (_, i) { return i !== i2; });
+        } else if (i2 === -1) {
+          adv = state.adv.concat([{ field: a.column, op: 'contains', value: value, conj: 'and' }]);
+        } else {
+          adv = state.adv.map(function (c, i) { return i === i2 ? Object.assign({}, c, { value: value }) : c; });
+        }
+        return Object.assign({}, state, { adv: adv });
+      }
+
+      case 'quick/setValuesLimit': {
+        var limit = Math.max(0, Math.floor(Number(a.value) || 0));
+        storage.set('quickValuesLimit', limit);
+        return Object.assign({}, state, { quickValuesLimit: limit });
       }
 
       case 'ui/setExportFormat':

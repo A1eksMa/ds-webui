@@ -27,10 +27,12 @@
 
   var el = Util.el, clear = Util.clear, groupBy = Util.groupBy;
   var visibleColumns = Dataset.visibleColumns, applyAdvanced = Dataset.applyAdvanced,
-      applyFilters = Dataset.applyFilters, applySort = Dataset.applySort, OP_LIST = Dataset.OP_LIST;
+      applySort = Dataset.applySort, findNextMatch = Dataset.findNextMatch,
+      uniqueValues = Dataset.uniqueValues, OP_LIST = Dataset.OP_LIST;
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
-  var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl;
-  var FUNNEL_SVG = ViewCommon.FUNNEL_SVG;
+  var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl,
+      quickValueInput = ViewCommon.quickValueInput;
+  var FUNNEL_SVG = ViewCommon.FUNNEL_SVG, SEARCH_SVG = ViewCommon.SEARCH_SVG, SORT_SVG = ViewCommon.SORT_SVG;
 
   var cellNode = function (v, entity, unparsed) {
     var st = '';
@@ -109,6 +111,33 @@
       );
     };
 
+    // Сортировка -- то же состояние (state.sortBy), что читают/пишут пиктограммы
+    // в заголовке таблицы (view-table.js::renderGrid, quick/sort): эта секция —
+    // полноценный многоуровневый редактор, порядок строк = приоритет (col1,
+    // потом col2, ...). По образцу groupRow выше.
+    var sortRow = function (lvl, i) {
+      var patch = function (p) { d({ type: 'sort/update', index: i, patch: p }); };
+      return el('div', { class: 'condition' },
+        el('select', { onchange: function (e) { patch({ col: e.target.value }); } },
+          [el('option', { value: '' }, 'поле…')].concat(cols.map(function (c) {
+            return el('option', { value: c, selected: c === lvl.col }, c);
+          }))),
+        el('select', { onchange: function (e) { patch({ dir: e.target.value }); } },
+          el('option', { value: 'asc', selected: lvl.dir !== 'desc' }, 'по возрастанию'),
+          el('option', { value: 'desc', selected: lvl.dir === 'desc' }, 'по убыванию')
+        ),
+        el('button', {
+          class: 'link', title: 'выше', disabled: i === 0,
+          onclick: function () { d({ type: 'sort/move', index: i, dir: -1 }); }
+        }, '↑'),
+        el('button', {
+          class: 'link', title: 'ниже', disabled: i === state.sortBy.length - 1,
+          onclick: function () { d({ type: 'sort/move', index: i, dir: 1 }); }
+        }, '↓'),
+        el('button', { class: 'link', onclick: function () { d({ type: 'sort/remove', index: i }); } }, '✕')
+      );
+    };
+
     node.appendChild(el('div', { class: 'advfilter-panel' },
       el('h2', { style: 'margin-top:0' }, 'Установить фильтр'),
       state.adv.length ? el('div', { class: 'conditions' }, state.adv.map(advRow)) : null,
@@ -118,10 +147,18 @@
 
       el('div', { class: 'divider' }),
 
-      el('h2', {}, 'Отсортировать'),
+      el('h2', {}, 'Сгруппировать'),
       state.groupBy.length ? el('div', { class: 'conditions' }, state.groupBy.map(groupRow)) : null,
       el('div', { class: 'advfilter-foot' },
         el('button', { class: 'link', onclick: function () { d({ type: 'group/add' }); } }, '+ уровень группировки')
+      ),
+
+      el('div', { class: 'divider' }),
+
+      el('h2', {}, 'Отсортировать'),
+      state.sortBy.length ? el('div', { class: 'conditions' }, state.sortBy.map(sortRow)) : null,
+      el('div', { class: 'advfilter-foot' },
+        el('button', { class: 'link', onclick: function () { d({ type: 'sort/add' }); } }, '+ уровень сортировки')
       ),
 
       el('div', { class: 'divider' }),
@@ -182,8 +219,13 @@
     ));
   };
 
-  // --- быстрые фильтры столбцов: ввод — черновик, применение — Enter / кнопка ---
-  var colFilterDraft = {};   // столбец -> введённый, но ещё не применённый текст
+  // --- quick-пиктограммы столбцов (поиск/фильтр): ввод — черновик, применение —
+  // Enter / кнопка. Ключ черновика "столбец:режим" — у одного столбца поиск и
+  // фильтр редактируются независимо друг от друга.
+  var quickDraft = {};
+  // Курсор поиска "найти следующую" на столбец — чисто навигационное, не в сторе
+  // (как и quickDraft, эфемерно, живёт только пока открыта страница).
+  var searchCursor = {};
 
   var renderGrid = function (state, d) {
     var node = document.getElementById('grid');
@@ -198,14 +240,23 @@
     var cols = visibleColumns(state.dataset, state.hideEmpty);
     var entMap = {};
     (state.dataset.entities || []).forEach(function (e) { entMap[e.name] = e; });
-    // конвейер: built dataset -> расширенный фильтр -> быстрые фильтры -> сортировка
+    // конвейер: built dataset -> расширенный фильтр (условия + то, что добавили
+    // пиктограммой "фильтр" -- это одно и то же состояние, state.adv) -> сортировка
+    // (условия + то, что переключили пиктограммой "сортировка" -- тоже одно и то
+    // же состояние, state.sortBy)
     var afterAdv = applyAdvanced(state.dataset, state.adv);
-    var afterQuick = applyFilters(afterAdv, state.tableFilters);
-    var filtered = { columns: afterQuick.columns, rows: applySort(afterQuick.rows, state.sort) };
+    var filtered = { columns: afterAdv.columns, rows: applySort(afterAdv.rows, state.sortBy) };
+
+    // индекс строки в filtered.rows по ссылке -- нужен, чтобы после поиска найти
+    // соответствующий <tr> в DOM (тегируется data-ridx ниже), в т.ч. после
+    // раскрытия свёрнутых групп на пути к строке
+    var rowIndex = new Map();
+    filtered.rows.forEach(function (r, i) { rowIndex.set(r, i); });
 
     // черновики для исчезнувших столбцов не держим
-    Object.keys(colFilterDraft).forEach(function (k) {
-      if (state.dataset.columns.indexOf(k) === -1) delete colFilterDraft[k];
+    Object.keys(quickDraft).forEach(function (k) {
+      var col = k.split(':')[0];
+      if (state.dataset.columns.indexOf(col) === -1) delete quickDraft[k];
     });
 
     // перетаскивание правой границы заголовка -> ширина столбца (в пресет по mouseup)
@@ -238,59 +289,101 @@
       document.addEventListener('mouseup', onUp);
     };
 
-    var applyColFilter = function (c, value) {
-      delete colFilterDraft[c];
-      d({ type: 'table/setFilter', column: c, value: value });
-      // грид перерисован синхронно — вернуть фокус в то же поле
+    // Прокрутить и подсветить найденную поиском строку; раскрыть по дороге все
+    // свёрнутые группы-предки (вычисляются из activeGroups тем же способом, что
+    // и в renderLevel ниже). Выполняется ПОСЛЕ построения activeGroups —
+    // объявлена здесь, вызывается из quick-панели поиска.
+    var revealRow = function (idx) {
       var g = document.getElementById('grid');
-      if (g) [].some.call(g.querySelectorAll('.col-filter'), function (n) {
-        if (n.dataset.col !== c) return false;
-        n.focus();
-        n.setSelectionRange(n.value.length, n.value.length);
-        return true;
+      var tr = g && g.querySelector('tr[data-ridx="' + idx + '"]');
+      if (!tr) return;
+      tr.scrollIntoView({ block: 'center' });
+      tr.classList.add('found');
+      setTimeout(function () { tr.classList.remove('found'); }, 1200);
+    };
+
+    var runSearch = function (c, needle) {
+      var from = searchCursor[c] !== undefined ? searchCursor[c] : -1;
+      var idx = findNextMatch(filtered.rows, c, needle, from);
+      if (idx === -1) return;
+      searchCursor[c] = idx;
+      var row = filtered.rows[idx];
+      var missing = [];
+      if (activeGroups.length) {
+        var path = [];
+        activeGroups.forEach(function (lvl) {
+          path.push(String(row[lvl] == null ? '∅' : row[lvl]));
+          var key = JSON.stringify(path.slice());
+          if (!state.expanded[key]) missing.push(key);
+        });
+      }
+      if (missing.length) {
+        missing.forEach(function (key) { d({ type: 'table/toggleGroup', key: key }); });
+        // toggleGroup перерисовал грид синхронно — искать <tr> уже в новом DOM
+      }
+      revealRow(idx);
+    };
+
+    // Единая quick-панель под пиктограммами: поиск и фильтр — один и тот же
+    // визуальный компонент (ViewCommon.quickValueInput), различается только то,
+    // что делает Enter/клик по значению из списка (onApply).
+    var quickPanel = function (c) {
+      var mode = state.quickOpen[c];
+      if (!mode) return null;
+      var advIdx = state.adv.findIndex(function (cond) { return cond.field === c && cond.op === 'contains'; });
+      var appliedValue = advIdx !== -1 ? String(state.adv[advIdx].value || '') : '';
+      var draftKey = c + ':' + mode;
+      var draft = quickDraft[draftKey] !== undefined ? quickDraft[draftKey] : (mode === 'filter' ? appliedValue : '');
+      var close = function () { delete quickDraft[draftKey]; d({ type: 'quick/toggle', column: c, mode: mode }); };
+      return quickValueInput({
+        value: draft,
+        dirty: mode === 'filter' && draft !== appliedValue,
+        placeholder: mode === 'search' ? 'поиск…' : 'фильтр…',
+        title: mode === 'search'
+          ? 'Текст + Enter — перейти к следующей строке ниже; Esc — закрыть'
+          : 'Текст + Enter (или кнопка справа) — применить; Esc — отменить ввод',
+        applyIcon: mode === 'search' ? SEARCH_SVG : FUNNEL_SVG,
+        applyTitle: mode === 'search' ? 'Найти следующую' : 'Применить фильтр',
+        values: uniqueValues(state.dataset.rows, c, state.quickValuesLimit),
+        limit: state.quickValuesLimit,
+        onInput: function (v) { quickDraft[draftKey] = v; },
+        onApply: function (v) {
+          delete quickDraft[draftKey];
+          if (mode === 'search') runSearch(c, v); else d({ type: 'quick/applyFilter', column: c, value: v });
+        },
+        onEscape: close,
+        onLimitChange: function (v) { d({ type: 'quick/setValuesLimit', value: v }); }
       });
     };
 
     var head = el('tr', {}, cols.map(function (c, idx) {
-      var applied = state.tableFilters[c] || '';
-      var draft = colFilterDraft[c] !== undefined ? colFilterDraft[c] : applied;
-      var field;
-      var input = el('input', {
-        type: 'text', class: 'col-filter', value: draft, placeholder: 'фильтр…',
-        title: 'Текст + Enter (или кнопка справа) — применить; Esc — отменить ввод',
-        dataset: { col: c },
-        oninput: function (e) {
-          colFilterDraft[c] = e.target.value;
-          field.classList.toggle('dirty', e.target.value !== (state.tableFilters[c] || ''));
-        },
-        onkeydown: function (e) {
-          if (e.key === 'Enter') { e.preventDefault(); applyColFilter(c, e.target.value); }
-          else if (e.key === 'Escape') {
-            e.preventDefault();
-            delete colFilterDraft[c];
-            e.target.value = state.tableFilters[c] || '';
-            field.classList.remove('dirty');
-          }
-        }
+      var hasFilter = state.adv.some(function (cond) {
+        return cond.field === c && cond.op === 'contains' && String(cond.value == null ? '' : cond.value).trim();
       });
-      field = el('div', { class: 'col-filter-field' + (draft !== applied ? ' dirty' : '') },
-        input,
+      var sortEntry = state.sortBy.filter(function (s) { return s.col === c; })[0];
+      var icons = el('div', { class: 'col-icons' },
         el('button', {
-          type: 'button', class: 'col-filter-apply', html: FUNNEL_SVG,
-          title: 'Применить фильтр',
-          onclick: function () { applyColFilter(c, input.value); }
+          type: 'button', class: 'col-icon' + (state.quickOpen[c] === 'search' ? ' active' : ''),
+          title: 'Поиск по столбцу', html: SEARCH_SVG,
+          onclick: function () { d({ type: 'quick/toggle', column: c, mode: 'search' }); }
+        }),
+        el('button', {
+          type: 'button', class: 'col-icon' + (state.quickOpen[c] === 'filter' ? ' active' : '') + (hasFilter ? ' set' : ''),
+          title: 'Быстрый фильтр (содержит)', html: FUNNEL_SVG,
+          onclick: function () { d({ type: 'quick/toggle', column: c, mode: 'filter' }); }
+        }),
+        el('button', {
+          type: 'button', class: 'col-icon' + (sortEntry ? ' set' : ''),
+          title: 'Сортировка: по возр. / по убыв. / без', html: SORT_SVG,
+          onclick: function () { d({ type: 'quick/sort', column: c }); }
         })
       );
-      var sortDir = state.sort && state.sort.col === c ? state.sort.dir : null;
       return el('th', {},
-        el('div', {
-          class: 'col-name' + (sortDir ? ' sorted' : ''),
-          title: 'Клик — сортировка по столбцу (по возр. / по убыв. / без)',
-          onclick: function () { d({ type: 'table/sort', column: c }); }
-        },
+        el('div', { class: 'col-name' + (sortEntry ? ' sorted' : '') },
           el('span', { class: 'col-name-txt' }, c),
-          sortDir ? el('span', { class: 'sort-ind' }, sortDir === 'asc' ? ' ▲' : ' ▼') : null),
-        field,
+          sortEntry ? el('span', { class: 'sort-ind' }, sortEntry.dir === 'asc' ? ' ▲' : ' ▼') : null),
+        icons,
+        quickPanel(c),
         el('div', {
           class: 'col-resizer',
           title: 'Потяните — ширина столбца; двойной клик — сброс',
@@ -330,7 +423,7 @@
         var lvl = activeGroups[path.length];
         if (lvl === undefined) {
           rows.forEach(function (r) {
-            bodyRows.push(el('tr', { class: 'member' }, cols.map(function (c, i) {
+            bodyRows.push(el('tr', { class: 'member', dataset: { ridx: String(rowIndex.get(r)) } }, cols.map(function (c, i) {
               var cell = cellNode(r[c], entMap[c], r.__u && r.__u[c]);
               if (i === 0) cell.style.paddingLeft = memberIndent;
               return cell;
@@ -367,8 +460,8 @@
         el('button', { class: 'link', onclick: function () { d({ type: 'table/collapseAll' }); } }, 'свернуть все')
       ));
     } else {
-      filtered.rows.forEach(function (r) {
-        bodyRows.push(el('tr', {}, cols.map(function (c) {
+      filtered.rows.forEach(function (r, i) {
+        bodyRows.push(el('tr', { dataset: { ridx: String(i) } }, cols.map(function (c) {
           return cellNode(r[c], entMap[c], r.__u && r.__u[c]);
         })));
       });
@@ -389,14 +482,17 @@
         colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
     ));
 
-    // реальная высота поля быстрого фильтра — под неё резервируется место в
-    // .col-name (padding-bottom: var(--filter-h)), чтобы прижатый ко дну
-    // ячейки (position:absolute) фильтр не перекрывал текст заголовка и не
-    // "гулял" по высоте между столбцами с разной длиной заголовка
-    var oneFilter = node.querySelector('.col-filter-field');
+    // реальная высота строки пиктограмм — под неё резервируется место в
+    // .col-name (padding-bottom: var(--filter-h)), чтобы прижатая ко дну
+    // ячейки (position:absolute) строка не перекрывала текст заголовка и не
+    // "гуляла" по высоте между столбцами с разной длиной заголовка. Открытая
+    // quick-панель (поиск/фильтр) в этот расчёт не входит — она плавает
+    // отдельным оверлеем над строками таблицы, а не раздвигает заголовок
+    // (см. .quick-panel в styles.css).
+    var oneIcons = node.querySelector('.col-icons');
     var docEl = document.documentElement;
-    if (oneFilter && docEl && docEl.style && typeof docEl.style.setProperty === 'function') {
-      docEl.style.setProperty('--filter-h', oneFilter.offsetHeight + 'px');
+    if (oneIcons && docEl && docEl.style && typeof docEl.style.setProperty === 'function') {
+      docEl.style.setProperty('--filter-h', oneIcons.offsetHeight + 'px');
     }
   };
 

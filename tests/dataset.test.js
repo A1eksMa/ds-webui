@@ -102,8 +102,62 @@ test('applyConditions: условие на несуществующий стол
 
 test('applySort: числа сравниваются как числа, пустые — в конце', () => {
   const rows = [{ v: '10' }, { v: '2' }, { v: '' }];
-  const out = App.applySort(rows, { col: 'v', dir: 'asc' });
+  const out = App.applySort(rows, [{ col: 'v', dir: 'asc' }]);
   assert.deepEqual(out.map((r) => r.v), ['2', '10', '']);
+});
+
+test('applySort: без уровней -- строки не трогает (тот же порядок)', () => {
+  const rows = [{ v: '10' }, { v: '2' }];
+  assert.deepEqual(App.applySort(rows, []), rows);
+  assert.deepEqual(App.applySort(rows, null), rows);
+});
+
+test('applySort: многоуровневая -- второй уровень решает при равенстве первого', () => {
+  const rows = [
+    { a: 'x', b: '2' }, { a: 'y', b: '1' }, { a: 'x', b: '1' }
+  ];
+  const out = App.applySort(rows, [{ col: 'a', dir: 'asc' }, { col: 'b', dir: 'asc' }]);
+  assert.deepEqual(out, [{ a: 'x', b: '1' }, { a: 'x', b: '2' }, { a: 'y', b: '1' }]);
+});
+
+test('applySort: второй уровень может сортировать по убыванию независимо от первого', () => {
+  const rows = [
+    { a: 'x', b: '1' }, { a: 'x', b: '3' }, { a: 'x', b: '2' }
+  ];
+  const out = App.applySort(rows, [{ col: 'a', dir: 'asc' }, { col: 'b', dir: 'desc' }]);
+  assert.deepEqual(out.map((r) => r.b), ['3', '2', '1']);
+});
+
+test('findNextMatch: находит следующую строку ниже курсора', () => {
+  const rows = [{ v: 'foo' }, { v: 'bar' }, { v: 'foobar' }];
+  assert.equal(App.findNextMatch(rows, 'v', 'foo', -1), 0);
+  assert.equal(App.findNextMatch(rows, 'v', 'foo', 0), 2);
+});
+
+test('findNextMatch: оборачивается в начало, если дальше ничего не нашлось', () => {
+  const rows = [{ v: 'foo' }, { v: 'bar' }];
+  assert.equal(App.findNextMatch(rows, 'v', 'foo', 0), 0);
+});
+
+test('findNextMatch: совпадений нет вовсе -> -1', () => {
+  const rows = [{ v: 'foo' }, { v: 'bar' }];
+  assert.equal(App.findNextMatch(rows, 'v', 'zzz', -1), -1);
+});
+
+test('uniqueValues: первые N уникальных значений в порядке строк (не по частоте)', () => {
+  const rows = [{ v: 'b' }, { v: 'a' }, { v: 'b' }, { v: 'a' }, { v: 'a' }, { v: 'c' }];
+  assert.deepEqual(App.uniqueValues(rows, 'v', 2), ['b', 'a']);
+});
+
+test('uniqueValues: limit<=0 -> пустой список без сканирования', () => {
+  const rows = [{ v: 'a' }];
+  assert.deepEqual(App.uniqueValues(rows, 'v', 0), []);
+  assert.deepEqual(App.uniqueValues(rows, 'v', -5), []);
+});
+
+test('uniqueValues: пустые/null значения пропускаются', () => {
+  const rows = [{ v: '' }, { v: null }, { v: 'a' }];
+  assert.deepEqual(App.uniqueValues(rows, 'v', 10), ['a']);
 });
 
 // visibleColumns: скрытые индикаторы (dataset.hiddenColumns, см. main.js/view-entities.js

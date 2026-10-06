@@ -18,7 +18,7 @@
   var loadSourceScript = App.loadSourceScript, download = App.download, storage = App.storage;
   var joinSources = App.joinSources, applyConditions = App.applyConditions,
       visibleColumns = App.visibleColumns, applyAdvanced = App.applyAdvanced,
-      applyFilters = App.applyFilters, applySort = App.applySort;
+      applySort = App.applySort;
   var implicitEntities = App.implicitEntities, resolveEntities = App.resolveEntities,
       parseTypes = App.parseTypes, colWidthPx = App.colWidthPx, columnTypesFor = App.columnTypesFor;
   var toCsv = App.toCsv, toXlsWorkbook = App.toXlsWorkbook, exportFilename = App.exportFilename;
@@ -107,9 +107,8 @@
   var exportDataset = function (state) {
     var cols = visibleColumns(state.dataset, state.hideEmpty);
     var afterAdv = applyAdvanced(state.dataset, state.adv);
-    var afterQuick = applyFilters(afterAdv, state.tableFilters);
     return {
-      dataset: { columns: afterQuick.columns, rows: applySort(afterQuick.rows, state.sort) },
+      dataset: { columns: afterAdv.columns, rows: applySort(afterAdv.rows, state.sortBy) },
       columns: cols
     };
   };
@@ -151,8 +150,7 @@
     var parts = [state.dataDir ? ('Путь: ' + state.dataDir) : 'Путь: не найден (нет ни data, ни sample-data)'];
     if (state.route === 'table' && state.dataset) {
       var cols = visibleColumns(state.dataset, state.hideEmpty);
-      var afterAdv = applyAdvanced(state.dataset, state.adv);
-      var shownRows = applyFilters(afterAdv, state.tableFilters).rows.length;
+      var shownRows = applyAdvanced(state.dataset, state.adv).rows.length;
       parts.push(
         'Пресет: ' + state.preset.name,
         'Источники: ' + selectedNames(state.preset).join(' + '),

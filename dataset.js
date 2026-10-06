@@ -102,17 +102,43 @@
     return { columns: columns, rows: rows.map(function (r) { return omit(r, '__match'); }) };
   };
 
+  // Общий предикат "содержит" -- и для старого текстового фильтра (теперь это
+  // просто contains-условие в state.adv, см. store.js::quick/applyFilter), и
+  // для поиска по столбцу (findNextMatch ниже).
   var matchesFilter = function (value, needle) {
     return String(value == null ? '' : value).toLowerCase().indexOf(needle.trim().toLowerCase()) !== -1;
   };
 
-  var applyFilters = function (dataset, filters) {
-    var active = Object.keys(filters || {}).filter(function (c) { return filters[c] && filters[c].trim(); });
-    if (!active.length) return dataset;
-    var rows = dataset.rows.filter(function (r) {
-      return active.every(function (c) { return matchesFilter(r[c], filters[c]); });
-    });
-    return { columns: dataset.columns, rows: rows };
+  // Пиктограмма "поиск" в заголовке столбца (view-table.js): следующая строка
+  // ниже afterIndex, чьё значение в column содержит needle; оборачивается в
+  // начало, если дальше ничего не нашлось. -1, если совпадений нет вовсе.
+  var findNextMatch = function (rows, column, needle, afterIndex) {
+    if (!needle || !needle.trim() || !rows.length) return -1;
+    var n = rows.length;
+    for (var step = 1; step <= n; step++) {
+      var i = (afterIndex + step) % n;
+      if (matchesFilter(rows[i][column], needle)) return i;
+    }
+    return -1;
+  };
+
+  // Выпадающий список под полем поиска/фильтра (view-common.js::quickValueInput):
+  // первые limit УНИКАЛЬНЫХ значений столбца в порядке строк (не топ по частоте,
+  // не отсортировано) -- ранний выход, чтобы не сканировать весь столбец на
+  // датасетах, где это бесполезно (значения почти все разные). limit<=0 -> [].
+  var uniqueValues = function (rows, column, limit) {
+    var out = [];
+    if (!limit || limit <= 0) return out;
+    var seen = Object.create(null);
+    for (var i = 0; i < rows.length && out.length < limit; i++) {
+      var v = rows[i][column];
+      if (v == null || v === '') continue;
+      var s = String(v);
+      if (seen[s]) continue;
+      seen[s] = true;
+      out.push(s);
+    }
+    return out;
   };
 
   // --- условия выборки (задаются в конструкторе, сужают датасет при построении) ---
@@ -222,7 +248,7 @@
     };
   };
 
-  // --- сортировка по столбцу (транзиентная) ---
+  // --- сортировка по столбцам (транзиентная, многоуровневая) ---
   var compareValues = function (a, b) {
     var na = Number(a), nb = Number(b);
     if (a !== '' && b !== '' && isFinite(na) && isFinite(nb)) {
@@ -231,20 +257,36 @@
     return String(a).toLowerCase().localeCompare(String(b).toLowerCase());
   };
 
-  var applySort = function (rows, sort) {
-    if (!sort || !sort.col) return rows;
-    var dir = sort.dir === 'desc' ? -1 : 1;
+  // Один уровень сравнения -- 0, если равны (переход к следующему уровню), иначе
+  // уже домноженный на направление. Общая часть старой однoуровневой applySort.
+  var compareLevel = function (x, y, level) {
+    // ключ сортировки: типизированный (row.__k) — число для number/date, строка для text
+    var kx = x.__k ? x.__k[level.col] : undefined;
+    var ky = y.__k ? y.__k[level.col] : undefined;
+    var av = kx !== undefined ? kx : x[level.col];
+    var bv = ky !== undefined ? ky : y[level.col];
+    var ae = av == null || av === '', be = bv == null || bv === '';
+    if (ae || be) return ae && be ? 0 : (ae ? 1 : -1);   // пустые/непарсибельные — в конец
+    var c = (typeof av === 'number' && typeof bv === 'number')
+      ? (av < bv ? -1 : av > bv ? 1 : 0) : compareValues(av, bv);
+    return c * (level.dir === 'desc' ? -1 : 1);
+  };
+
+  // sortBy: [{col,dir}] -- порядок уровней = приоритет (ORDER BY col1, col2, ...).
+  // Уровни без выбранного столбца пропускаются. Один проход, стабильно (ничья на
+  // всех уровнях -> исходный индекс) -- важно не только как инвариант сортировки
+  // самой по себе, но и для группировки (renderGrid сортирует ДО groupBy, а
+  // groupBy -- стабильное партиционирование, так что порядок внутри каждой
+  // группы наследуется от этой сортировки без отдельной логики).
+  var applySort = function (rows, sortBy) {
+    var levels = (sortBy || []).filter(function (l) { return l && l.col; });
+    if (!levels.length) return rows;
     return rows.map(function (r, i) { return [r, i]; }).sort(function (x, y) {
-      // ключ сортировки: типизированный (row.__k) — число для number/date, строка для text
-      var kx = x[0].__k ? x[0].__k[sort.col] : undefined;
-      var ky = y[0].__k ? y[0].__k[sort.col] : undefined;
-      var av = kx !== undefined ? kx : x[0][sort.col];
-      var bv = ky !== undefined ? ky : y[0][sort.col];
-      var ae = av == null || av === '', be = bv == null || bv === '';
-      if (ae || be) return ae && be ? x[1] - y[1] : (ae ? 1 : -1);   // пустые/непарсибельные — в конец
-      var c = (typeof av === 'number' && typeof bv === 'number')
-        ? (av < bv ? -1 : av > bv ? 1 : 0) : compareValues(av, bv);
-      return c !== 0 ? c * dir : x[1] - y[1];                        // стабильность
+      for (var i = 0; i < levels.length; i++) {
+        var c = compareLevel(x[0], y[0], levels[i]);
+        if (c !== 0) return c;
+      }
+      return x[1] - y[1];   // стабильность
     }).map(function (p) { return p[0]; });
   };
 
@@ -264,7 +306,7 @@
 
   return {
     joinSources: joinSources, JOIN_TYPES: JOIN_TYPES, JOIN_TYPE_IDS: JOIN_TYPE_IDS,
-    matchesFilter: matchesFilter, applyFilters: applyFilters,
+    matchesFilter: matchesFilter, findNextMatch: findNextMatch, uniqueValues: uniqueValues,
     OPERATORS: OPERATORS, OP_IDS: OP_IDS, OP_NO_VALUE: OP_NO_VALUE, OP_LIST: OP_LIST,
     parseList: parseList, matchCondition: matchCondition, conditionActive: conditionActive,
     applyConditions: applyConditions, evalRowGroups: evalRowGroups, applyAdvanced: applyAdvanced,
