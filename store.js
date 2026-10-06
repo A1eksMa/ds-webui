@@ -419,6 +419,14 @@
         return Object.assign({}, state, { quickOpen: qo });
       }
 
+      // Клик вне любой открытой quick-панели (или повторный клик по
+      // пиктограмме, который уже обрабатывает quick/toggle выше) — закрыть
+      // все открытые слоты сразу (на столбце может быть открыт только один,
+      // но проще закрыть все, чем искать, какой). См. view-table.js — общий
+      // обработчик клика по document.
+      case 'quick/closeAll':
+        return Object.assign({}, state, { quickOpen: {} });
+
       case 'quick/sort': {
         var idx = state.sortBy.findIndex(function (s) { return s.col === a.column; });
         var sb;

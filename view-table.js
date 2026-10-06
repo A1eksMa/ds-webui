@@ -32,7 +32,8 @@
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
   var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl,
       quickValueInput = ViewCommon.quickValueInput;
-  var FUNNEL_SVG = ViewCommon.FUNNEL_SVG, SEARCH_SVG = ViewCommon.SEARCH_SVG, SORT_SVG = ViewCommon.SORT_SVG;
+  var FUNNEL_SVG = ViewCommon.FUNNEL_SVG, SEARCH_SVG = ViewCommon.SEARCH_SVG, SORT_SVG = ViewCommon.SORT_SVG,
+      SORT_ASC_SVG = ViewCommon.SORT_ASC_SVG, SORT_DESC_SVG = ViewCommon.SORT_DESC_SVG;
 
   var cellNode = function (v, entity, unparsed) {
     var st = '';
@@ -227,10 +228,33 @@
   // (как и quickDraft, эфемерно, живёт только пока открыта страница).
   var searchCursor = {};
 
+  // Клик куда угодно вне открытой quick-панели (и не по одной из трёх
+  // пиктограмм — у них свой onclick, не должен гаситься этим же кликом)
+  // закрывает все открытые quick-слоты, как и попросил пользователь. Слушатель
+  // навешивается на document один раз (node #grid переживает каждый render —
+  // clear() чистит только его содержимое), currentState/currentDispatch
+  // обновляются при каждом renderGrid.
+  var docCloseListenerAttached = false;
+  var currentState = null, currentDispatch = null;
+  var attachDocCloseListener = function () {
+    if (docCloseListenerAttached) return;
+    docCloseListenerAttached = true;
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.closest && (t.closest('.quick-panel') || t.closest('.col-icon'))) return;
+      var qo = currentState && currentState.quickOpen;
+      if (!qo || !Object.keys(qo).some(function (k) { return qo[k]; })) return;
+      if (currentDispatch) currentDispatch({ type: 'quick/closeAll' });
+    }, true);
+  };
+
   var renderGrid = function (state, d) {
     var node = document.getElementById('grid');
     if (!node) return;
     clear(node);
+    currentState = state;
+    currentDispatch = d;
+    attachDocCloseListener();
 
     if (!state.dataset) {
       node.appendChild(el('p', { class: 'muted' }, 'Сначала постройте таблицу в «Конструкторе выборки».'));
@@ -340,16 +364,23 @@
         dirty: mode === 'filter' && draft !== appliedValue,
         placeholder: mode === 'search' ? 'поиск…' : 'фильтр…',
         title: mode === 'search'
-          ? 'Текст + Enter — перейти к следующей строке ниже; Esc — закрыть'
-          : 'Текст + Enter (или кнопка справа) — применить; Esc — отменить ввод',
+          ? 'Текст + Enter — перейти к следующей строке ниже и закрыть; Esc — закрыть без поиска'
+          : 'Текст + Enter (или кнопка справа) — применить и закрыть; Esc — отменить ввод и закрыть',
         applyIcon: mode === 'search' ? SEARCH_SVG : FUNNEL_SVG,
         applyTitle: mode === 'search' ? 'Найти следующую' : 'Применить фильтр',
         values: uniqueValues(state.dataset.rows, c, state.quickValuesLimit),
         limit: state.quickValuesLimit,
         onInput: function (v) { quickDraft[draftKey] = v; },
+        // Применяется и клавишей Ввод, и кнопкой справа, и кликом по значению
+        // из выпадающего списка (все три ведут сюда, см. ViewCommon.quickValueInput)
+        // — во всех трёх случаях: записать значение в черновик (иначе для
+        // поиска, у которого нет "примененного" состояния в сторе, поле после
+        // клика по списку снова показывало бы пусто) и закрыть панель, как
+        // попросил пользователь.
         onApply: function (v) {
-          delete quickDraft[draftKey];
+          quickDraft[draftKey] = v;
           if (mode === 'search') runSearch(c, v); else d({ type: 'quick/applyFilter', column: c, value: v });
+          d({ type: 'quick/toggle', column: c, mode: mode });
         },
         onEscape: close,
         onLimitChange: function (v) { d({ type: 'quick/setValuesLimit', value: v }); }
@@ -374,7 +405,8 @@
         }),
         el('button', {
           type: 'button', class: 'col-icon' + (sortEntry ? ' set' : ''),
-          title: 'Сортировка: по возр. / по убыв. / без', html: SORT_SVG,
+          title: 'Сортировка: по возр. / по убыв. / без',
+          html: !sortEntry ? SORT_SVG : (sortEntry.dir === 'asc' ? SORT_ASC_SVG : SORT_DESC_SVG),
           onclick: function () { d({ type: 'quick/sort', column: c }); }
         })
       );

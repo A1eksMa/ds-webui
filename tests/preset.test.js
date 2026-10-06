@@ -316,6 +316,14 @@ test('reducer: quick/toggle переключает режим столбца (se
   assert.equal(s2.quickOpen.a, 'filter');
 });
 
+test('reducer: quick/closeAll закрывает все открытые quick-слоты сразу', () => {
+  const s1 = App.reducer(App.initialState, { type: 'quick/toggle', column: 'a', mode: 'search' });
+  const s2 = App.reducer(s1, { type: 'quick/toggle', column: 'b', mode: 'filter' });
+  const s3 = App.reducer(s2, { type: 'quick/closeAll' });
+  assert.equal(s3.quickOpen.a, undefined);
+  assert.equal(s3.quickOpen.b, undefined);
+});
+
 test('reducer: quick/sort -- цикл по столбцу: нет записи -> asc -> desc -> убрать', () => {
   const s1 = App.reducer(App.initialState, { type: 'quick/sort', column: 'a' });
   assert.deepEqual(s1.sortBy, [{ col: 'a', dir: 'asc' }]);

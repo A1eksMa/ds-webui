@@ -324,9 +324,15 @@ table.data .col-icon svg { display: block; }
 /* Quick-панель (поиск ИЛИ фильтр, один и тот же компонент, см.
    ViewCommon.quickValueInput) -- плавающий оверлей НАД строками таблицы, не
    участвует в --filter-h (может быть выше, чем зарезервированное место в
-   заголовке, из-за выпадающего списка значений под полем). */
+   заголовке, из-за выпадающего списка значений под полем). Ширина ФИКСИРОВАНА
+   (не "left:.5rem; right:.5rem", как было) -- при узком столбце поле ввода
+   раньше сжималось вместе с ним, иногда до нерабочей ширины (курсор было не
+   поставить); фиксированная ширина может выходить за правую границу узкого
+   столбца и перекрывать соседние заголовки -- это нормально, это оверлей
+   (z-index 10) над строками, а не часть разметки столбца. */
 table.data .quick-panel {
-  position: absolute; left: .5rem; right: .5rem; top: 100%; z-index: 10;
+  position: absolute; left: .5rem; top: 100%; z-index: 10;
+  width: 16rem; max-width: calc(100vw - 2rem);
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .15); padding: .3rem; margin-top: .15rem;
 }

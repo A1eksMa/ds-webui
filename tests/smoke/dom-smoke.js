@@ -139,6 +139,12 @@ context.document = {
   createElement(tag) { return makeNode(tag); },
   createTextNode(text) { return { nodeType: 3, text: text }; },
   getElementById(id) { return idRegistry[id] || null; },
+  // view-table.js::attachDocCloseListener навешивает ОДИН document-level
+  // click-слушатель (закрытие quick-панели по клику вне неё) -- стабу
+  // достаточно принять вызов, срабатывание клика этот смоук-тест не
+  // проверяет (нет реальных кликов).
+  addEventListener() {},
+  removeEventListener() {},
   head: headEl,
   body: bodyEl
 };

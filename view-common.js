@@ -93,7 +93,13 @@
   // (поиск -- переход к строке, фильтр -- contains-условие в state.adv), как
   // и попросил пользователь. Выпадающий список первых N уникальных значений
   // столбца (opts.values, уже посчитан вызывающей стороной через
-  // Dataset.uniqueValues) + общая настройка "Показать N" под ним.
+  // Dataset.uniqueValues) + общая настройка "Показать N" под ним; клик по
+  // значению из списка идёт через тот же onApply, что и Enter/кнопка --
+  // opts.onApply сам отвечает и за запись значения в поле (черновик), и за
+  // закрытие панели (view-table.js::quickPanel). Появляется по клику на
+  // пиктограмму; закрывается по Enter, клику вне панели (documents click,
+  // см. view-table.js::attachDocCloseListener) или повторному клику на
+  // пиктограмму.
   var quickValueInput = function (opts) {
     var input = el('input', {
       type: 'text', class: 'quick-input', value: opts.value || '',
@@ -164,13 +170,25 @@
     + '<path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" '
     + 'd="M10.2 10.2 14 14"/></svg>';
 
-  // Пиктограмма «сортировка» — две стрелки (возр./убыв.), под заголовком
-  // столбца; индикатор текущего направления (▲/▼) рисуется отдельно рядом
-  // (col-name, как и раньше), эта пиктограмма — сама кнопка-переключатель.
+  // Пиктограмма «сортировка» — привычная воронка (тот же визуальный язык,
+  // что и у фильтра, FUNNEL_SVG выше), по запросу пользователя: без
+  // сортировки — воронка-контур (не спутать с залитой воронкой фильтра
+  // рядом); по возрастанию — ПЕРЕВЁРНУТАЯ воронка (раструб вниз) со
+  // стрелкой вверх; по убыванию — обычная воронка (раструб вверх, горлышко
+  // внизу) со стрелкой вниз. Один и тот же viewBox у всех трёх — чтобы
+  // пиктограмма не "прыгала" при появлении/исчезновении стрелки.
   var SORT_SVG =
-    '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">'
-    + '<path fill="currentColor" d="M4.5 1.5 7 5.3H2z"/>'
-    + '<path fill="currentColor" d="M11.5 14.5 9 10.7h5z"/></svg>';
+    '<svg viewBox="0 0 16 14" width="13" height="12" aria-hidden="true" focusable="false">'
+    + '<polygon points="0,0 12,0 7,7 7,13 5,13 5,7" fill="none" stroke="currentColor" stroke-width="1.3" '
+    + 'stroke-linejoin="round"/></svg>';
+  var SORT_ASC_SVG =
+    '<svg viewBox="0 0 16 14" width="13" height="12" aria-hidden="true" focusable="false">'
+    + '<polygon points="0,14 12,14 7,7 7,1 5,1 5,7" fill="currentColor"/>'
+    + '<polygon points="13,8 16,8 14.5,4" fill="currentColor"/></svg>';
+  var SORT_DESC_SVG =
+    '<svg viewBox="0 0 16 14" width="13" height="12" aria-hidden="true" focusable="false">'
+    + '<polygon points="0,0 12,0 7,7 7,13 5,13 5,7" fill="currentColor"/>'
+    + '<polygon points="13,6 16,6 14.5,10" fill="currentColor"/></svg>';
 
   // Главное меню в навбаре. «Настройки» и «Индикаторы» — настоящие страницы
   // (полностью меняют вид экрана, это логично отдельными экранами): на
@@ -246,6 +264,7 @@
   return {
     opSelect: opSelect, valueControl: valueControl, quickValueInput: quickValueInput,
     viewNav: viewNav, viewFooter: viewFooter, conditionsBlock: conditionsBlock,
-    FUNNEL_SVG: FUNNEL_SVG, SEARCH_SVG: SEARCH_SVG, SORT_SVG: SORT_SVG
+    FUNNEL_SVG: FUNNEL_SVG, SEARCH_SVG: SEARCH_SVG,
+    SORT_SVG: SORT_SVG, SORT_ASC_SVG: SORT_ASC_SVG, SORT_DESC_SVG: SORT_DESC_SVG
   };
 });
