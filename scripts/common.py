@@ -6,7 +6,8 @@
 
 Producer-конец цепочки: пользователь правит таблицу в офисном пакете, макрос
 выгружает колоночный JSON `<username>_<timestamp>.json` в папку, которую мониторит
-`ds-loader` (его `update_dir`) -> `ds load sources/<username> <file> --dt <ts>`.
+`ds-loader` (`upload/`/`load/` источника `<username>`, либо один из его
+`watch_dirs`) -> `ds upload`/`ds load sources/<username> <file> --dt <ts>`.
 """
 from __future__ import annotations
 
@@ -20,8 +21,22 @@ from pathlib import Path
 g_exportedScripts = ()  # не показывать common в списке макросов
 
 # ─── НАСТРОЙКА НА КОНКРЕТНОЙ МАШИНЕ ───────────────────────────────────────────
-# Папка, которую мониторит ds-loader (его update_dir). Сюда кладутся выгрузки.
+# Папка, которую мониторит ds-loader (его upload/ или load/ источника, либо
+# один из его watch_dirs). Сюда кладутся выгрузки.
+#
+# Если указать свою (не ds-inbox) и она на этой машине не существует —
+# write_json() НЕ создаёт её сама (в отличие от прежнего поведения): это,
+# скорее всего, опечатка или ещё не подготовленная установка, и тихо писать
+# в только что созданную "правильную" папку, которую ds-loader не мониторит,
+# хуже, чем явно откатиться на ds-inbox (с предупреждением в лог) — его можно
+# позже найти и перенести руками, а молча утерянные файлы в несуществующем
+# until-just-now каталоге — нет. ds-inbox сама по себе всегда создаётся, если
+# её ещё нет (как и раньше) — INBOX_DIR по умолчанию ею и является.
 INBOX_DIR = Path.home() / "ds-inbox"
+
+# Резервная папка — та же ds-inbox. Используется, если INBOX_DIR выше указана
+# на что-то другое, а то "другое" не существует (см. _resolve_inbox_dir).
+_FALLBACK_INBOX_DIR = Path.home() / "ds-inbox"
 
 # Куда писать лог макросов.
 LOG_DIR = Path.home() / ".config" / "alteroffice" / "5" / "user" / "Scripts" / "python"
@@ -116,13 +131,33 @@ def get_sheet(sheets, name: str, index: int):
     return sheets.getByIndex(index)
 
 
+def _resolve_inbox_dir() -> Path:
+    """INBOX_DIR, если она существует; иначе — ds-inbox (создаётся при необходимости).
+
+    INBOX_DIR, настроенная на что-то, кроме ds-inbox, НЕ создаётся автоматически —
+    отсутствие именно её означает "ещё не готово/опечатка", и правильнее откатиться
+    на известную ds-inbox (с предупреждением в лог), чем молча писать в только что
+    созданную папку, которую ds-loader, возможно, не мониторит.
+    """
+    if INBOX_DIR.is_dir():
+        return INBOX_DIR
+    if INBOX_DIR != _FALLBACK_INBOX_DIR:
+        logging.warning(
+            "INBOX_DIR %s не существует — использую резервную %s",
+            INBOX_DIR, _FALLBACK_INBOX_DIR,
+        )
+    _FALLBACK_INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    return _FALLBACK_INBOX_DIR
+
+
 def write_json(data: dict) -> "Path | None":
-    """Атомарно записать columnar-JSON в INBOX_DIR. Пустой data -> ничего не пишем."""
+    """Атомарно записать columnar-JSON в INBOX_DIR (или резервную ds-inbox, см.
+    _resolve_inbox_dir). Пустой data -> ничего не пишем."""
     if not data:
         logging.warning("нечего выгружать — файл не создан")
         return None
-    INBOX_DIR.mkdir(parents=True, exist_ok=True)
-    target = INBOX_DIR / export_filename()
+    inbox_dir = _resolve_inbox_dir()
+    target = inbox_dir / export_filename()
     tmp = target.with_name(target.name + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
     os.replace(str(tmp), str(target))  # .json появляется атомарно и целиком
