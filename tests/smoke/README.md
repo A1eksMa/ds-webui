@@ -5,19 +5,29 @@
 `dom-smoke.js` реально выполняет последовательность `<script>` из `index.html` —
 включая настоящий bootstrap (`window.DS` / `window.__ds`, fallback `data/` →
 `sample-data/`) и настоящий `sample-data/` — в минимальном самодельном DOM-стабе
-(без jsdom, без npm-зависимостей: `document`/`window`/`localStorage` на десяток
-методов, ровно то, что использует код). Ловит то, что тесты на чистые функции
-не видят: забытый экспорт в `window.DS_APP`, неправильный порядок `<script>` в
-`index.html`, сломанную ленивую ссылку (`view-build.js`/`view-table.js` →
-`window.DS_APP.store`/`buildDataset`/`exportXls`/`exportCsv` из `main.js`).
+(без jsdom, без npm-зависимостей: `document`/`window`/`sessionStorage`/
+`requestAnimationFrame` на десяток методов, ровно то, что использует код). Ловит
+то, что тесты на чистые функции не видят: забытый экспорт в `window.DS_APP`,
+неправильный порядок `<script>` в `index.html`, сломанную ленивую ссылку
+(`view-build.js`/`view-table.js` → `window.DS_APP.store`/`buildDataset`/
+`exportXls`/`exportCsv` из `main.js`).
 
 Не запускается автоматически — файл не подпадает под автообнаружение
 `node --test` (оно ищет `*.test.js`/`*-test.js`/`*_test.js`, а не любой файл в
 `tests/`). Запуск:
 
 ```bash
-node tests/smoke/dom-smoke.js
+node tests/smoke/dom-smoke.js                  # обычный boot -> «Таблица»
+node tests/smoke/dom-smoke.js --simulate-crash  # восстановление после краш-watchdog
 ```
+
+`--simulate-crash` предсеивает `sessionStorage` так, как если бы прошлый `render()`
+этой вкладки не досчитал до подтверждённого кадра (`renderWatchdog` остался
+`true` — реальный симптом краха браузера на нехватке памяти с последующим
+перезапуском вкладки), плюс «сохранённый» проблемный пресет прошлой попытки.
+Проверяет: применяется пустой пресет (не сохранённый), показывается пояснение
+в «Конструкторе», watchdog снимается, а сохранённый пресет остаётся нетронутым
+в `sessionStorage` (не удаляется, доступен для ручной загрузки).
 
 Стаб покрывает ровно то, что нужно для одного прохода бутстрапа (загрузка
 манифеста и источников, JOIN, переход на «Таблицу», рендер грида) — не замена

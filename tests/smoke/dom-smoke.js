@@ -102,6 +102,33 @@ context.localStorage = {
   removeItem: (k) => { delete localStorageStore[k]; }
 };
 
+// sessionStorage -- effects.js::storage читает/пишет именно его (с 0.25.0a1,
+// per-tab вместо localStorage). Отдельное хранилище, тот же интерфейс.
+const sessionStorageStore = {};
+context.sessionStorage = {
+  getItem: (k) => (k in sessionStorageStore ? sessionStorageStore[k] : null),
+  setItem: (k, v) => { sessionStorageStore[k] = String(v); },
+  removeItem: (k) => { delete sessionStorageStore[k]; }
+};
+
+// --simulate-crash: имитирует вкладку, у которой прошлый render() не
+// досчитал до подтверждённого кадра (renderWatchdog остался true) -- тот же
+// сценарий, что настоящий краш браузера на нехватке памяти с последующим
+// перезапуском вкладки. Предсёдим и "сохранённый пресет" прошлой попытки,
+// чтобы отдельно проверить, что он не затирается при восстановлении.
+const SIMULATE_CRASH = process.argv.includes('--simulate-crash');
+const POISONED_PRESET = { name: 'big', query: { as_of: null, sources: { CRM: { labels: null } } },
+  view: { joins: [], conditions: [], entities: [], column_widths: {} } };
+if (SIMULATE_CRASH) {
+  sessionStorageStore['ds-webui:renderWatchdog'] = 'true';
+  sessionStorageStore['ds-webui:preset'] = JSON.stringify(POISONED_PRESET);
+}
+
+// main.js::render вызывает requestAnimationFrame (дважды, вложенно) вокруг
+// watchdog-флага крах-защиты -- тут нет реального layout/paint, поэтому
+// просто сразу выполняем callback синхронно.
+context.requestAnimationFrame = (cb) => { cb(); return 0; };
+
 const appDiv = makeNode('div');
 appDiv.setAttribute('id', 'app');
 const bodyEl = makeNode('body');
@@ -178,16 +205,34 @@ setTimeout(() => {
     assert.deepEqual(missing, [], 'отсутствуют экспорты в window.DS_APP: ' + missing.join(', '));
 
     const state = DS_APP.store.getState();
-    assert.equal(state.buildError, null, 'buildError после автосборки пресета по умолчанию: ' + state.buildError);
-    assert.equal(state.route, 'table', 'после boot ожидался переход на «Таблицу»');
-    assert.ok(state.dataset && state.dataset.rows.length > 0, 'датасет после boot пуст');
 
-    const gridNode = idRegistry['grid'];
-    assert.ok(gridNode && gridNode.children.length > 0, 'грид не отрендерился в #grid');
+    if (SIMULATE_CRASH) {
+      assert.equal(state.route, 'build', 'после восстановления после краха ожидался «Конструктор»');
+      assert.ok(state.buildError && /не хватило памяти/.test(state.buildError),
+        'ожидалось пояснение про крах, получено: ' + state.buildError);
+      // не assert.deepEqual(..., {}) -- state.preset создан внутри vm-контекста,
+      // его Object.prototype -- из другого "реалма", чем {} в этом файле;
+      // deepStrictEqual (node:assert/strict) сравнивает и прототип, cross-realm
+      // литерал не совпадёт структурно, даже будучи таким же по форме
+      assert.equal(Object.keys(state.preset.query.sources).length, 0,
+        'после краха ожидался пустой пресет, а не сохранённый: ' + JSON.stringify(state.preset.query.sources));
+      assert.equal(sessionStorageStore['ds-webui:renderWatchdog'], 'false', 'watchdog должен быть снят');
+      assert.deepEqual(JSON.parse(sessionStorageStore['ds-webui:preset']), POISONED_PRESET,
+        'сохранённый (проблемный) пресет не должен затираться при восстановлении');
+      console.log('OK: watchdog нашёл незавершённый render -> пустой пресет, сохранённый не тронут');
+      console.log('SMOKE TEST (--simulate-crash) PASSED');
+    } else {
+      assert.equal(state.buildError, null, 'buildError после автосборки пресета по умолчанию: ' + state.buildError);
+      assert.equal(state.route, 'table', 'после boot ожидался переход на «Таблицу»');
+      assert.ok(state.dataset && state.dataset.rows.length > 0, 'датасет после boot пуст');
 
-    console.log('OK: bootstrap -> manifest -> preset -> join(CRM,ERP) -> route=table -> renderGrid');
-    console.log('    dataset:', state.dataset.rows.length, 'строк,', state.dataset.columns.length, 'колонок');
-    console.log('SMOKE TEST PASSED');
+      const gridNode = idRegistry['grid'];
+      assert.ok(gridNode && gridNode.children.length > 0, 'грид не отрендерился в #grid');
+
+      console.log('OK: bootstrap -> manifest -> preset -> join(CRM,ERP) -> route=table -> renderGrid');
+      console.log('    dataset:', state.dataset.rows.length, 'строк,', state.dataset.columns.length, 'колонок');
+      console.log('SMOKE TEST PASSED');
+    }
   } catch (err) {
     console.error('SMOKE TEST FAILED:', err.message);
     process.exitCode = 1;

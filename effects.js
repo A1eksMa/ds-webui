@@ -52,13 +52,23 @@
     }
   };
 
+  // sessionStorage, НЕ localStorage -- намеренно: до этого сохранённый
+  // пресет/настройки были общими на весь file://-источник, то есть вторая
+  // открытая вкладка подхватывала то же самое (нельзя было держать два разных
+  // пресета в двух вкладках одновременно), а если сохранённый пресет на
+  // большом датасете вызывал у браузера нехватку памяти и перезапуск вкладки
+  // -- тот же пресет применялся заново на каждой попытке, цикл перезапуска
+  // без возможности выйти. sessionStorage привязан к конкретной вкладке
+  // (рестор той же вкладки после краха его переживает -- см. main.js::render
+  // про watchdog, который ловит именно этот случай отдельно; но НОВАЯ вкладка
+  // начинает с чистого sessionStorage, то есть с дефолтного пресета).
   var storage = {
     get: function (key) {
-      try { return JSON.parse(localStorage.getItem('ds-webui:' + key)); }
+      try { return JSON.parse(sessionStorage.getItem('ds-webui:' + key)); }
       catch (e) { return null; }
     },
     set: function (key, value) {
-      try { localStorage.setItem('ds-webui:' + key, JSON.stringify(value)); }
+      try { sessionStorage.setItem('ds-webui:' + key, JSON.stringify(value)); }
       catch (e) { /* приватное окно / отключено — best-effort */ }
     }
   };
