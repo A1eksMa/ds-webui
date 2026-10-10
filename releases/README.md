@@ -6,17 +6,33 @@
 
 Для машины без git: скачать один архив вместо файлов по отдельности.
 
+**Два варианта архива на одну и ту же версию** (начиная с 0.28.0a1) — `ds-webui`'s core
+один и тот же, различие только в наличии опционального конвертера `.xlsx`
+([`ds-webui-import`](https://github.com/A1eksMa/ds-webui-import), подключается как git
+submodule, каталог `import/`):
+
+- `ds-webui-<version>.tar.gz` — **lite**, без `import/`: ни кнопки «Импорт» на
+  «Настройках», ни единой внешней зависимости (та же минималистичная версия, что и раньше).
+- `ds-webui-<version>-with-import.tar.gz` — **full**, с распакованным `import/` внутри:
+  кнопка «Импорт из Excel» появляется.
+
+Выбор не влияет на номер версии — обе собраны из одного и того же состояния репозитория,
+отличается только присутствие опционального каталога `import/`.
+
 ## Распаковка
 
 ```bash
 mkdir -p /path/to/target/folder
-tar -xzf ds-webui-<version>.tar.gz -C /path/to/target/folder
+tar -xzf ds-webui-<version>[-with-import].tar.gz -C /path/to/target/folder
 ```
 
-Внутри: `index.html`, модули приложения (`util.js`, `effects.js`, `dataset.js`,
-`entities.js`, `export.js`, `store.js`, `view-common.js`, `view-build.js`, `view-table.js`,
-`main.js`), `styles.css`, `sample-data/` (включая пресет по умолчанию `base.js`),
-`scripts/`, `LICENSE`, `README.md`.
+Внутри (lite): `index.html`, модули приложения (`util.js`, `effects.js`, `dataset.js`,
+`entities.js`, `export.js`, `store.js`, `view-common.js`, `view-build.js`, `view-entities.js`,
+`view-table.js`, `main.js`), `styles.css`, `sample-data/` (включая пресет по умолчанию
+`base.js`), `scripts/`, `LICENSE`, `README.md`. В `-with-import` — дополнительно каталог
+`import/` (`import.js`, `vendor/xlsx.full.min.js`, `vendor/SHEETJS-LICENSE`, `LICENSE`,
+`README.md` этого отдельного репозитория — подробности и его собственный changelog там же,
+[`ds-webui-import/releases/README.md`](https://github.com/A1eksMa/ds-webui-import/blob/main/releases/README.md)).
 
 ## Запуск
 
@@ -27,6 +43,30 @@ tar -xzf ds-webui-<version>.tar.gz -C /path/to/target/folder
 `scripts/` — макросы офисного пакета для выгрузки листа в JSON под `ds-loader`
 (см. `scripts/README.md`). `docs/contract.md` и `tools/gen_sample.py` в архив не входят —
 они только в репозитории.
+
+---
+
+## 0.28.0a1 — `ds-webui-0.28.0a1.tar.gz` / `ds-webui-0.28.0a1-with-import.tar.gz`
+
+Безусловный переход на ленивый columnar-формат источников + поддержка нескольких файлов
+манифеста + опциональный конвертер `.xlsx`.
+
+- **Ленивый формат `data/<Source>.js`** (требует `ds-loader` 0.9.0a1+, вместе с которым и
+  выпущено) — каждый показатель (+ ключ) оборачивается в свою функцию; `ds-webui` вызывает
+  только геттеры реально нужных показателей, остальные не парсятся/не аллоцируются браузером
+  (ленивая компиляция V8). Решает проблему источников с сотней показателей, из которых
+  нужен один-два. Старый построчный формат убран без обратной совместимости.
+- **`manifest.imports.js`** — опциональный индекс произвольного числа файлов-фрагментов
+  манифеста, объединяемых с основным `manifest.js` на чтении (явная ошибка при совпадении
+  имён источников). На «Настройках» — поле «Каталог данных» + кнопка «Обновить манифест»
+  (перечитать манифест без перезагрузки страницы, или переключиться на другой каталог).
+- **Кнопка «Импорт из Excel»** на «Настройках» — только если подключён (как git submodule)
+  отдельный открытый репозиторий [`ds-webui-import`](https://github.com/A1eksMa/ds-webui-import):
+  разбирает `.xlsx` в тот же ленивый формат + фрагмент манифеста, без единой новой
+  зависимости в lite-сборке. См. "Два варианта архива" выше.
+- `store.js` (+`mergeManifests`, `manifestError`), `effects.js` (`loadManifest`,
+  `loadManifestFragments`), `main.js` (bootstrap вынесен из `index.html`), `view-build.js`,
+  `docs/contract.md`; 107 тестов (было 100), плюс оба DOM-смоук-теста.
 
 ---
 
