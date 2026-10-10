@@ -8,6 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const App = require('../entities.js');
+const Formula = require('../formula.js');
 
 test('parseNum: точка как десятичный разделитель', () => {
   assert.deepEqual(App.parseNum('99.00'), { ok: true, value: 99 });
@@ -78,9 +79,36 @@ test('resolveCell: kind=resolve — при равных весах побежд�
   assert.equal(App.resolveCell(from, { a: 'from-a', b: 'from-b' }), 'from-a');
 });
 
-test('resolveCell: kind=derived — sum по числовым входам', () => {
-  const from = { kind: 'derived', op: 'sum', inputs: [{ column: 'a' }, { column: 'b' }] };
-  assert.equal(App.resolveCell(from, { a: '2', b: '3' }), '5');
+// kind=formula: разбор AST (formula.js) делается отдельно и передаётся resolveCell третьим
+// аргументом — в реальном пайплайне это делает resolveEntities один раз на сущность, не на
+// каждую строку (см. тест ниже). Арифметика/функции сами детально покрыты в formula.test.js —
+// здесь только интеграция с entities.js (буквы из inputs, lookupRaw из сырой строки).
+test('resolveCell: kind=formula — буквы входов подставляются из jrow по порядку inputs', () => {
+  const from = { kind: 'formula', inputs: [{ column: 'a' }, { column: 'b' }], formula: 'A + B' };
+  const parsed = Formula.parse(from.formula, App.lettersForInputs(from.inputs));
+  assert.equal(App.resolveCell(from, { a: '2', b: '3' }, parsed), '5');
+});
+
+test('resolveCell: kind=formula — [Источник.Показатель] читает сырое поле мимо входов', () => {
+  const from = { kind: 'formula', inputs: [{ column: 'a' }], formula: 'A + [ERP.price]' };
+  const parsed = Formula.parse(from.formula, App.lettersForInputs(from.inputs));
+  assert.equal(App.resolveCell(from, { a: '1', 'ERP.price': '99' }, parsed), '100');
+});
+
+test('resolveCell: kind=formula — ошибка разбора -> undefined, не исключение', () => {
+  const from = { kind: 'formula', inputs: [{ column: 'a' }], formula: 'A +' };
+  const parsed = Formula.parse(from.formula, App.lettersForInputs(from.inputs));
+  assert.equal(parsed.ok, false);
+  assert.equal(App.resolveCell(from, { a: '1' }, parsed), undefined);
+});
+
+test('resolveEntities: kind=formula — парсится один раз на сущность, применяется ко всем строкам', () => {
+  const entities = App.normalizeEntities({ entities: [
+    { name: 'Итог', from: { kind: 'formula', inputs: [{ column: 'a' }, { column: 'b' }], formula: 'A + B' } }
+  ] }).map(function (e) { return e; });
+  const joined = { columns: ['a', 'b'], rows: [{ a: '1', b: '2' }, { a: '10', b: '20' }] };
+  const out = App.resolveEntities(joined, entities);
+  assert.deepEqual(out.rows.map(function (r) { return r['Итог']; }), ['3', '30']);
 });
 
 test('normalizeEntities: отбрасывает сущность без источника значения', () => {

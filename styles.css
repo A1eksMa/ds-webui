@@ -184,6 +184,11 @@ input[type=text], select {
 .entity-inputs { display: flex; flex-direction: column; gap: .3rem; margin: .2rem 0; }
 .entity-input { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
 .entity-input .ent-weight { width: 4.5rem; }
+.entity-letter {
+  flex: none; width: 1.6rem; text-align: center; font-weight: 600; font-family: monospace;
+  color: var(--muted);
+}
+.entity .ent-formula { width: 100%; font-family: monospace; }
 .entity-format { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: .3rem; }
 .entity-format .field.small input, .entity-format .field.small select { min-width: 5rem; }
 .entity .ent-sep { width: 6rem; margin-left: .35rem; }

@@ -260,9 +260,18 @@ window.DS.sources["CRM"] = {
       "inputs": [ { "column": "ERP.price", "weight": 0.9 },
                   { "column": "CRM.price", "weight": 0.4 } ],
       "null_wins": true,        // null (DELETE) из весомого входа побеждает
-      // или "kind": "derived" — производная:
-      "op": "sum",             // sum|avg|min|max|concat|first_nonempty|count_nonempty
-      "sep": " "               // для concat
+      // или "kind": "formula" — формула с буквенными переменными (formula.js):
+      "inputs": [ { "column": "ERP.price" }, { "column": "ERP.stock" } ],
+      // входы по порядку получают буквы A, B, ... (позиционно, не хранятся отдельно —
+      // переставили/удалили вход, буквы остальных сдвинулись)
+      "formula": "A * B + MAX(A, [CRM.price])"
+      // своя сериализация выражений (+ - * / скобки, сравнения == != < <= > >=,
+      // тернарный cond?a:b и IF(cond,a,b), функции SUM/AVG/MIN/MAX/CONCAT/
+      // FIRST_NONEMPTY/COUNT_NONEMPTY — см. formula.js), НЕ eval/new Function: пресет
+      // можно скачать и передать другому человеку, формула как настоящий JS-код была бы
+      // вектором выполнения чужого кода при открытии чужого пресета. [Источник.Показатель]
+      // — прямая ссылка на сырое поле join'а, минуя буквы (не обязательно добавлять как
+      // отдельный вход, если нужно использовать его лишь один раз).
     }
   }
   ```

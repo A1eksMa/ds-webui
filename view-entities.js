@@ -5,29 +5,32 @@
 // «Настроек» (источники/связки/условия — то, что после FROM). Из выбранных
 // на «Настройках» полей строишь итоговые столбцы: поле как есть («+ показатель
 // источника» — без типизации/переименования), разрешение коллизии по весам,
-// производная, либо переименованное/типизированное поле («+ индикатор»).
+// формула (буквы-переменные A, B, ... + выражение, см. formula.js), либо
+// переименованное/типизированное поле («+ индикатор»).
 // Условия внизу страницы — второй проход фильтрации (после условий «Настроек»
 // на сырых полях), уже по именам сущностей, применяется в main.js после
 // resolveEntities. DOM-зависимый код — не тестируется под node:test. Зависит
 // от util.js, store.js (selectedNames), entities.js (ENTITY_KINDS/
-// ENTITY_TYPES/DERIVED_OPS/entityOutNames), view-common.js (conditionsBlock).
+// ENTITY_TYPES/entityOutNames/lettersForInputs), formula.js (letterFor/parse/
+// FUNCTIONS), view-common.js (conditionsBlock).
 // Ссылка на main.js (buildDataset/store) разрешается лениво через
 // window.DS_APP в момент клика — main.js грузится последним.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
-      require('./util.js'), require('./store.js'), require('./entities.js'), require('./view-common.js')
+      require('./util.js'), require('./store.js'), require('./entities.js'),
+      require('./view-common.js'), require('./formula.js')
     );
   } else {
     root.DS_APP = root.DS_APP || {};
-    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
+    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
   }
-})(typeof window !== 'undefined' ? window : this, function (Util, Store, Entities, ViewCommon) {
+})(typeof window !== 'undefined' ? window : this, function (Util, Store, Entities, ViewCommon, Formula) {
 
   var el = Util.el;
   var selectedNames = Store.selectedNames;
   var ENTITY_KINDS = Entities.ENTITY_KINDS, ENTITY_TYPES = Entities.ENTITY_TYPES,
-      DERIVED_OPS = Entities.DERIVED_OPS, entityOutNames = Entities.entityOutNames;
+      entityOutNames = Entities.entityOutNames, lettersForInputs = Entities.lettersForInputs;
   var conditionsBlock = ViewCommon.conditionsBlock;
 
   var viewEntities = function (state, d) {
@@ -44,9 +47,14 @@
       return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
     }, []);
 
-    var colSelect = function (cur, onChange) {
+    // exclude -- колонки, которые не предлагать в списке (кроме cur -- текущая всегда
+    // видна в своём же select'е, даже если формально "занята"). Нужно для формульных
+    // входов: один и тот же сырой показатель не выбрать на два разных входа одной сущности.
+    var colSelect = function (cur, onChange, exclude) {
+      var hide = exclude || [];
+      var options = pickedColumns.filter(function (c) { return c === cur || hide.indexOf(c) === -1; });
       return el('select', { onchange: function (e) { onChange(e.target.value); } },
-        [el('option', { value: '' }, 'поле…')].concat(pickedColumns.map(function (c) {
+        [el('option', { value: '' }, 'поле…')].concat(options.map(function (c) {
           return el('option', { value: c, selected: c === cur }, c);
         })));
     };
@@ -59,13 +67,26 @@
       );
     };
 
-    var entityInputs = function (e, i, withWeight) {
+    // withLetters -- показывать букву (A, B, ...) перед выбором поля (formula-входы); эта
+    // же буква -- имя переменной в поле формулы ниже. Позиционная, не хранится отдельно --
+    // пересчитывается из индекса при каждом рендере (как нумерация столбцов в таблицах):
+    // переставили/удалили вход -- буквы остальных сдвинулись, формулу может понадобиться
+    // поправить вручную.
+    var entityInputs = function (e, i, withWeight, withLetters) {
+      var inputs = e.from.inputs || [];
       return el('div', { class: 'entity-inputs' },
-        (e.from.inputs || []).map(function (inp, ii) {
+        inputs.map(function (inp, ii) {
+          // один и тот же сырой показатель нельзя выбрать на два входа ОДНОЙ сущности --
+          // не блокируется формально, но не имеет смысла (у него и так уже есть буква);
+          // список у каждого входа исключает то, что занято другими входами этой сущности.
+          var usedByOthers = inputs
+            .filter(function (_, jj) { return jj !== ii; })
+            .map(function (x) { return x.column; });
           return el('div', { class: 'entity-input' },
+            withLetters ? el('span', { class: 'entity-letter' }, Formula.letterFor(ii)) : null,
             colSelect(inp.column, function (v) {
               d({ type: 'preset/updateEntityInput', index: i, ii: ii, patch: { column: v } });
-            }),
+            }, usedByOthers),
             withWeight ? el('input', {
               type: 'number', class: 'ent-weight', step: '0.05', min: '0', max: '1',
               value: inp.weight == null ? '' : String(inp.weight), placeholder: 'вес',
@@ -100,17 +121,24 @@
             'null (DELETE) из весомого источника побеждает'),
           el('p', { class: 'muted', style: 'margin:.2rem 0 0' }, 'при равных весах — по порядку сверху вниз')
         );
-      } else if (kind === 'derived') {
+      } else if (kind === 'formula') {
+        var letters = lettersForInputs(e.from.inputs || []);
+        var formulaText = e.from.formula || '';
+        var parsed = formulaText.trim() ? Formula.parse(formulaText, letters) : null;
         body = el('div', {},
-          el('select', { onchange: function (ev) { up({ from: { op: ev.target.value } }); } },
-            DERIVED_OPS.map(function (o) {
-              return el('option', { value: o[0], selected: o[0] === (e.from.op || 'first_nonempty') }, o[1]);
-            })),
-          e.from.op === 'concat' ? el('input', {
-            type: 'text', class: 'ent-sep', value: e.from.sep == null ? ' ' : e.from.sep, placeholder: 'разделитель',
-            onchange: function (ev) { up({ from: { sep: ev.target.value } }); }
-          }) : null,
-          entityInputs(e, i, false)
+          entityInputs(e, i, false, true),
+          el('label', { class: 'field small', style: 'display:block;margin-top:.5rem' }, 'Формула',
+            el('input', {
+              type: 'text', class: 'ent-formula', value: formulaText,
+              placeholder: letters.length ? letters.join(' + ') : 'сначала добавьте вход(ы)',
+              onchange: function (ev) { up({ from: { formula: ev.target.value } }); }
+            })
+          ),
+          parsed && !parsed.ok ? el('p', { class: 'error', style: 'margin:.2rem 0 0' }, parsed.error) : null,
+          el('p', { class: 'muted', style: 'margin:.2rem 0 0' },
+            'буквы A, B, ... -- по порядку входов выше; функции: '
+            + Object.keys(Formula.FUNCTIONS).concat(['IF']).join(', ')
+            + '; прямая ссылка на сырое поле — [Источник.Показатель]')
         );
       } else {
         body = colSelect(e.from.column, function (v) { up({ from: { column: v } }); });

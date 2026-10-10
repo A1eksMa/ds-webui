@@ -2,11 +2,19 @@
 
 // Сущности: формирование столбцов таблицы из выбранных полей (браузерный
 // Level 2) — типизация, парсинг чисел/дат/bool, резолюция коллизий,
-// производные показатели. Самая рискованная логика в приложении — граничные
-// случаи (серийная дата Excel, неоднозначные разделители) легче всего
-// сломать правкой «на глаз», см. tests/entities.test.js. Не зависит от
-// других модулей.
-(function (root) {
+// формульные показатели (kind: 'formula', formula.js). Самая рискованная
+// логика в приложении — граничные случаи (серийная дата Excel, неоднозначные
+// разделители) легче всего сломать правкой «на глаз», см. tests/entities.test.js.
+// Зависит от formula.js (должен грузиться раньше, см. index.html) -- formula.js
+// сам не зависит от entities.js, иначе был бы цикл.
+(function (root, factory) {
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = factory(require('./formula.js'));
+  } else {
+    root.DS_APP = root.DS_APP || {};
+    Object.assign(root.DS_APP, factory(root.DS_APP));
+  }
+})(typeof window !== 'undefined' ? window : this, function (Formula) {
 
   // ручная ширина столбцов «Таблицы» (px); та же шкала уходит в выгрузку Excel
   var DEFAULT_COL_W = 150;   // px, если для столбца ничего не задано
@@ -23,14 +31,9 @@
   };
 
   var ENTITY_TYPES = [['text', 'текст'], ['number', 'число'], ['date', 'дата'], ['bool', 'логич.']];
-  var ENTITY_KINDS = [['field', 'поле'], ['resolve', 'коллизия'], ['derived', 'производная']];
-  var DERIVED_OPS = [
-    ['sum', 'сумма'], ['avg', 'среднее'], ['min', 'минимум'], ['max', 'максимум'],
-    ['concat', 'склейка'], ['first_nonempty', 'первое непустое'], ['count_nonempty', 'кол-во непустых']
-  ];
+  var ENTITY_KINDS = [['field', 'поле'], ['resolve', 'коллизия'], ['formula', 'формула']];
   var _ENT_TYPE = { text: 1, number: 1, date: 1, bool: 1 };
-  var _ENT_KIND = { field: 1, resolve: 1, derived: 1 };
-  var _DERIVED_OP = { sum: 1, avg: 1, min: 1, max: 1, concat: 1, first_nonempty: 1, count_nonempty: 1 };
+  var _ENT_KIND = { field: 1, resolve: 1, formula: 1 };
   var _DATE_TOKENS = /YYYY|MM|DD|HH|mm|ss/g;
 
   var _pad2 = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -175,8 +178,16 @@
     return true;
   };
 
-  // одна ячейка сущности из строки join'а -> строка | null | undefined
-  var resolveCell = function (from, jrow) {
+  // Буквы входов по порядку (A, B, ..., Z, AA, ...) -- та же нумерация, что в UI
+  // (view-entities.js), formula.js::letterFor.
+  var lettersForInputs = function (inputs) {
+    return (inputs || []).map(function (_, i) { return Formula.letterFor(i); });
+  };
+
+  // одна ячейка сущности из строки join'а -> строка | null | undefined. parsed -- для
+  // kind === 'formula', результат Formula.parse(...) по этой сущности (см. resolveEntities:
+  // формула разбирается ОДИН РАЗ на сущность, не на каждую строку).
+  var resolveCell = function (from, jrow, parsed) {
     from = from || {};
     if (from.kind === 'resolve') {
       var ins = (from.inputs || [])
@@ -188,33 +199,15 @@
       }
       return undefined;
     }
-    if (from.kind === 'derived') {
-      var cols = (from.inputs || []).map(function (x) { return x.column; }).filter(Boolean);
-      var vals = cols.map(function (c) { return jrow[c]; })
-        .filter(function (v) { return v !== undefined && v !== null && v !== ''; });
-      var op = from.op || 'first_nonempty';
-      if (!vals.length) return op === 'count_nonempty' ? '0' : undefined;
-      if (op === 'first_nonempty') return vals[0];
-      if (op === 'count_nonempty') return String(vals.length);
-      if (op === 'concat') return vals.join(from.sep == null ? ' ' : String(from.sep));
-      var nums = vals.map(function (v) { return parseNum(v, null); });
-      if (op === 'sum' || op === 'avg') {
-        var got = nums.filter(function (r) { return r.ok; }).map(function (r) { return r.value; });
-        if (!got.length) return undefined;
-        var acc = got.reduce(function (a, b) { return a + b; }, 0);
-        return _numStr(op === 'avg' ? acc / got.length : acc);
-      }
-      if (op === 'min' || op === 'max') {
-        if (nums.every(function (r) { return r.ok; })) {
-          var xs = nums.map(function (r) { return r.value; });
-          return _numStr(op === 'min' ? Math.min.apply(null, xs) : Math.max.apply(null, xs));
-        }
-        var srt = vals.slice().sort(function (a, b) {
-          return String(a).toLowerCase().localeCompare(String(b).toLowerCase());
-        });
-        return op === 'min' ? srt[0] : srt[srt.length - 1];
-      }
-      return vals[0];
+    if (from.kind === 'formula') {
+      if (!parsed || !parsed.ok) return undefined;   // ошибка разбора -- уже показана в UI
+      var letters = {};
+      var names = lettersForInputs(from.inputs);
+      (from.inputs || []).forEach(function (inp, i) { letters[names[i]] = jrow[inp.column]; });
+      return Formula.evaluate(parsed.ast, {
+        letters: letters,
+        lookupRaw: function (path) { return jrow[path]; }
+      });
     }
     return jrow[from.column];   // kind === 'field'
   };
@@ -244,9 +237,17 @@
   // joined {columns, rows} + [entity] -> {columns: имена сущностей, rows}
   var resolveEntities = function (joined, entities) {
     var names = entityOutNames(entities);
+    // Формула разбирается ОДИН раз на сущность, не на каждую строку -- парсинг короткой
+    // строки дёшев сам по себе, но делать его N_строк раз на каждую formula-сущность
+    // бессмысленно, когда AST не меняется между строками одного build'а.
+    var parsedByEntity = entities.map(function (e) {
+      return e.from.kind === 'formula'
+        ? Formula.parse(e.from.formula, lettersForInputs(e.from.inputs))
+        : null;
+    });
     var rows = joined.rows.map(function (jr) {
       var out = {};
-      entities.forEach(function (e, i) { out[names[i]] = resolveCell(e.from, jr); });
+      entities.forEach(function (e, i) { out[names[i]] = resolveCell(e.from, jr, parsedByEntity[i]); });
       return out;
     });
     return { columns: names, rows: rows };
@@ -350,8 +351,7 @@
         from.null_wins = f.null_wins !== false;
       } else {
         from.inputs = inputs;
-        from.op = _DERIVED_OP[f.op] ? f.op : 'first_nonempty';
-        if (from.op === 'concat') from.sep = f.sep == null ? ' ' : String(f.sep);
+        from.formula = typeof f.formula === 'string' ? f.formula : '';
       }
       var out = {
         name: typeof e.name === 'string' ? e.name : '',
@@ -382,18 +382,14 @@
 
   var api = {
     DEFAULT_COL_W: DEFAULT_COL_W, MIN_COL_W: MIN_COL_W, colWidthPx: colWidthPx,
-    ENTITY_TYPES: ENTITY_TYPES, ENTITY_KINDS: ENTITY_KINDS, DERIVED_OPS: DERIVED_OPS,
+    ENTITY_TYPES: ENTITY_TYPES, ENTITY_KINDS: ENTITY_KINDS,
     parseNum: parseNum, parseDate: parseDate, formatDate: formatDate, parseBool: parseBool,
     typeCell: typeCell, resolveCell: resolveCell, implicitEntities: implicitEntities,
     entityOutNames: entityOutNames, resolveEntities: resolveEntities, parseTypes: parseTypes,
     presetColumns: presetColumns, _entityColumns: _entityColumns, mergeEntity: mergeEntity,
-    normalizeEntities: normalizeEntities, columnTypesFor: columnTypesFor, columnType: columnType
+    normalizeEntities: normalizeEntities, columnTypesFor: columnTypesFor, columnType: columnType,
+    lettersForInputs: lettersForInputs
   };
 
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = api;
-  } else {
-    root.DS_APP = root.DS_APP || {};
-    Object.assign(root.DS_APP, api);
-  }
-})(typeof window !== 'undefined' ? window : this);
+  return api;
+});
