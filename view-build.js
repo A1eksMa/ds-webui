@@ -140,8 +140,48 @@
       actions: { add: 'preset/addCondition', update: 'preset/updateCondition', remove: 'preset/removeCondition' }
     });
 
+    // Путь к каталогу данных + обновление манифеста (см. docs/contract.md "Кто
+    // читает и кто пишет манифест"). Поле неконтролируемое (значение не следует
+    // за state.dataDir на каждый render) -- читается напрямую из DOM по клику,
+    // как и остальные "раз в момент действия" инпуты на этой странице (ср.
+    // window.prompt у «Скачать пресет» выше); при смене пути фоллбэка на
+    // sample-data нет -- это осознанное действие пользователя, не автозапуск.
+    var dataDirBlock = el('div', { class: 'row' },
+      el('label', { class: 'field small' }, 'Каталог данных (относительно index.html)',
+        el('input', { type: 'text', id: 'data-dir-input', value: state.dataDir || '' })
+      ),
+      el('button', {
+        title: 'Перечитать manifest.js (+ manifest.imports.js, если есть) по указанному пути '
+          + '-- подхватить новые источники без перезагрузки страницы, или переключиться на другой каталог',
+        onclick: function () {
+          var input = document.getElementById('data-dir-input');
+          var dir = (input && input.value || '').trim() || state.dataDir;
+          window.DS_APP.refreshManifest(window.DS_APP.store, dir);
+        }
+      }, 'Обновить манифест'),
+      // «Импорт» -- только если опциональный submodule ds-webui-import подключён
+      // (index.html грузит import/vendor/xlsx.full.min.js + import/import.js
+      // опционально; нет его -- window.DS_APP.importXlsx не определён, кнопки нет
+      // вообще, никакой зависимости и точки входа в lite-сборке).
+      // Видимый <input type="file">, НЕ скрытый с программным .click() -- отмена
+      // системного диалога выбора файла тогда просто ничего не делает (как и у
+      // «Загрузить пресет» ниже), не нужно ловить отдельно.
+      window.DS_APP.importXlsx ? el('label', { class: 'file-btn' }, 'Импорт из Excel',
+        el('input', {
+          type: 'file', accept: '.xlsx',
+          onchange: function (e) {
+            window.DS_APP.importXlsx(e.target.files[0]);
+            e.target.value = '';
+          }
+        })
+      ) : null
+    );
+
     return el('section', { class: 'page build' },
       el('h1', {}, 'Конструктор выборки'),
+
+      dataDirBlock,
+      state.manifestError ? el('p', { class: 'error' }, state.manifestError) : null,
 
       el('h2', {}, 'Источники и показатели'),
       mSources.length

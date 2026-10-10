@@ -14,8 +14,11 @@
   var el = App.el, clear = App.clear, fmtDate = App.fmtDate;
   var selectedNames = App.selectedNames, manifestSource = App.manifestSource,
       createStore = App.createStore, reducer = App.reducer, initialState = App.initialState,
-      basePreset = App.basePreset, normalizePreset = App.normalizePreset;
-  var loadSourceScript = App.loadSourceScript, download = App.download, storage = App.storage;
+      basePreset = App.basePreset, normalizePreset = App.normalizePreset,
+      mergeManifests = App.mergeManifests;
+  var loadSourceScript = App.loadSourceScript, download = App.download, storage = App.storage,
+      loadGlobal = App.loadGlobal, loadManifest = App.loadManifest,
+      loadManifestFragments = App.loadManifestFragments;
   var joinSources = App.joinSources, applyConditions = App.applyConditions,
       visibleColumns = App.visibleColumns, applyAdvanced = App.applyAdvanced,
       applySort = App.applySort;
@@ -63,17 +66,34 @@
         store.dispatch({ type: 'build/error', message: 'Не загрузились источники: ' + failed.join(', ') });
         return;
       }
+      // Ленивый columnar-формат (ds-webui/docs/contract.md): box.columns[label] —
+      // функция, возвращающая массив значений по всем строкам (позиционно, по
+      // индексу). Вызываем ТОЛЬКО геттеры реально нужных колонок (ключ + выбранные
+      // показатели) — остальные V8 не материализует (ленивая компиляция функций),
+      // ради этого формат и существует. Явный undefined на позиции строки —
+      // показателя у неё не было (как отсутствующий ключ в старом построчном
+      // формате); null — показатель явно удалён (DELETE). Собираем ту же построчную
+      // форму { [label]: value, ... }, что ожидает весь остальной конвейер
+      // (joinSources/applyConditions/...) — он не знает про columns вообще.
       var selected = names.map(function (n) {
         var box = window.DS.sources[n];
         var key = box.meta.key || 'id';
         var allow = [key].concat(box.meta.labels);           // ключ — тоже выбираемое поле
         var wanted = state.preset.query.sources[n].labels || allow;
-        return {
-          name: n,
-          key: key,
-          labels: wanted.filter(function (l) { return allow.indexOf(l) !== -1; }),
-          data: box.data
-        };
+        var labels = wanted.filter(function (l) { return allow.indexOf(l) !== -1; });
+        var cols = [key].concat(labels.filter(function (l) { return l !== key; }));
+        var colValues = {};
+        cols.forEach(function (c) { colValues[c] = box.columns[c] ? box.columns[c]() : []; });
+        var rowCount = colValues[key] ? colValues[key].length : 0;
+        var data = [];
+        for (var i = 0; i < rowCount; i++) {
+          var row = {};
+          cols.forEach(function (c) {
+            if (colValues[c][i] !== undefined) row[c] = colValues[c][i];
+          });
+          data.push(row);
+        }
+        return { name: n, key: key, labels: labels, data: data };
       });
       var joined = joinSources(selected, state.preset.view.joins || []);
       if (!joined.columns.length) {
@@ -258,22 +278,70 @@
 
   store.subscribe(render);
 
+  // ---------------------------------------------------------------------------
+  // Загрузка манифеста: manifest.js (сегодня -- пишет ds-loader) + произвольное
+  // число фрагментов из manifest.imports.js (зарезервировано под отдельный
+  // конвертер -- см. docs/contract.md "Кто читает и кто пишет манифест").
+  // Слияние -- только на чтении, здесь. bootstrapManifest сама не решает, нужен
+  // ли фоллбэк на sample-data (это только для самого первого старта, см.
+  // initialBoot) -- просто резолвит то, что нашла по конкретному dir, плюс
+  // rawManifest (null, если именно manifest.js не загрузился) для вызывающих,
+  // которым это важно знать.
+  // ---------------------------------------------------------------------------
+
+  var bootstrapManifest = function (dir) {
+    return Promise.all([loadManifest(dir), loadManifestFragments(dir)]).then(function (res) {
+      var merged = mergeManifests(res[0], res[1]);
+      return { manifest: merged.manifest, dataDir: dir, conflicts: merged.conflicts, rawManifest: res[0] };
+    });
+  };
+
+  // Кнопка «Обновить манифест» / смена пути на «Настройках» (view-build.js).
+  // Никакого фоллбэка на sample-data здесь -- это осознанный путь пользователя,
+  // а не автозапуск; если по указанному пути ничего не нашлось, источники
+  // просто окажутся пустым списком (viewBuild уже показывает это как есть,
+  // не нужно отдельной ошибки) -- см. docs/contract.md.
+  var refreshManifest = function (store, dir) {
+    bootstrapManifest(dir).then(function (r) {
+      store.dispatch({ type: 'manifest/loaded', manifest: r.manifest, dataDir: r.dataDir, conflicts: r.conflicts });
+    });
+  };
+
+  // Самый первый, автоматический запуск страницы: data/ -> sample-data/ (фоллбэк,
+  // только если именно "data/manifest.js" не нашёлся вовсе -- rawManifest===null,
+  // не "сторона нашлась, но пуста" -- это не ошибка, не нужно подменять реальные,
+  // но пока пустые данные демкой), затем data/base.js (пресет по умолчанию, тоже
+  // опциональный файл, см. index.html -- комментарий про "Пресет по умолчанию").
+  var initialBoot = function () {
+    return bootstrapManifest('data').then(function (r) {
+      if (r.rawManifest !== null) return r;
+      return bootstrapManifest('sample-data').then(function (r2) {
+        return r2.rawManifest !== null ? r2 : Object.assign({}, r2, { dataDir: null });
+      });
+    }).then(function (r) {
+      if (!r.dataDir) return r;
+      return loadGlobal(r.dataDir, 'base.js', 'DS_BASE_PRESET').then(function () { return r; });
+    });
+  };
+
   // публикуются для ленивых ссылок из view-build.js / view-table.js (onclick)
   App.store = store;
   App.buildDataset = buildDataset;
   App.exportXls = exportXls;
   App.exportCsv = exportCsv;
+  App.refreshManifest = refreshManifest;
 
-  window.__ds.ready.then(function (boot) {
+  initialBoot().then(function (boot) {
     // читаем сохранённое ДО первого полноценного render — иначе он перезапишет
     // ключи текущим (ещё дефолтным) состоянием
     var saved = storage.get('preset');
-    var manifest = (boot && boot.manifest) || { sources: [] };
+    var manifest = boot.manifest;
 
     store.dispatch({
       type: 'manifest/loaded',
       manifest: manifest,
-      dataDir: boot ? boot.dataDir : null
+      dataDir: boot.dataDir,
+      conflicts: boot.conflicts
     });
 
     // Крах-watchdog (см. render() выше): если флаг ещё выставлен на старте

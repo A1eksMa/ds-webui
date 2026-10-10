@@ -18,6 +18,46 @@
     });
   };
 
+  // Инъекция <script src="<dir>/<file>">, резолвится значением window[globalName] после
+  // загрузки (сначала сбрасывает его в undefined -- чтобы отсутствие файла не унаследовало
+  // значение от предыдущего успешного вызова с тем же именем глобала). Отсутствие файла
+  // (onerror) -- не ошибка, резолвится в null; вызывающий сам решает, что это значит.
+  var loadGlobal = function (dir, file, globalName) {
+    return new Promise(function (resolve) {
+      window[globalName] = undefined;
+      var s = document.createElement('script');
+      s.src = dir + '/' + file;
+      s.onload = function () { resolve(window[globalName] !== undefined ? window[globalName] : null); };
+      s.onerror = function () { resolve(null); };
+      document.head.appendChild(s);
+    });
+  };
+
+  // data/manifest.js -- см. docs/contract.md. null, если файла нет/не загрузился (вызывающий
+  // решает, что дальше: фоллбэк на sample-data при первом старте, явная ошибка при смене
+  // каталога пользователем).
+  var loadManifest = function (dir) { return loadGlobal(dir, 'manifest.js', 'DS_MANIFEST'); };
+
+  // data/manifest.imports.js -- индекс имён доп. файлов-фрагментов манифеста (зарезервировано
+  // под отдельные источники вне основного manifest.js -- см. docs/contract.md "Кто читает и
+  // кто пишет манифест"; сегодня никто такие файлы не производит, но ds-webui их уже умеет
+  // читать). Каждый файл из списка грузится ПО ОЧЕРЕДИ, не параллельно -- все они пишут в
+  // один и тот же временный window.DS_MANIFEST_FRAGMENT, параллельные загрузки гонялись бы
+  // друг с другом за него. Отсутствующий индекс или отдельный фрагмент -- не ошибка, просто
+  // пропускается.
+  var loadManifestFragments = function (dir) {
+    return loadGlobal(dir, 'manifest.imports.js', 'DS_MANIFEST_IMPORTS').then(function (files) {
+      return (files || []).reduce(function (chain, file) {
+        return chain.then(function (acc) {
+          return loadGlobal(dir, file, 'DS_MANIFEST_FRAGMENT').then(function (frag) {
+            if (frag) acc.push(frag);
+            return acc;
+          });
+        });
+      }, Promise.resolve([]));
+    });
+  };
+
   var download = function (filename, text, mime) {
     var blob = new Blob(['﻿', text], { type: mime });
     var url = URL.createObjectURL(blob);
@@ -75,7 +115,8 @@
 
   var api = {
     loadSourceScript: loadSourceScript, download: download, readFile: readFile,
-    pasteFromClipboard: pasteFromClipboard, storage: storage
+    pasteFromClipboard: pasteFromClipboard, storage: storage,
+    loadGlobal: loadGlobal, loadManifest: loadManifest, loadManifestFragments: loadManifestFragments
   };
 
   if (typeof module !== 'undefined' && module.exports) {

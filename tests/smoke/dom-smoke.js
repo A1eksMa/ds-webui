@@ -181,7 +181,14 @@ wireScriptLoading(context.document.body);
 
 function run(relPath) {
   const src = loadFileSync(relPath);
-  if (src == null) throw new Error('missing ' + relPath);
+  if (src == null) {
+    // import/ -- опциональный git submodule (ds-webui-import), не обязателен в
+    // "lite"-чекауте (без `git submodule update --init`); отсутствие -- не ошибка,
+    // как и в настоящем браузере (404 на <script src> просто не исполняет этот
+    // тег, остальные теги по порядку продолжают грузиться как обычно).
+    if (relPath.indexOf('import/') === 0) return;
+    throw new Error('missing ' + relPath);
+  }
   vm.runInContext(src, vmContext, { filename: relPath });
 }
 

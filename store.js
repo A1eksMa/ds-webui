@@ -30,6 +30,28 @@
 
   var selectedNames = function (preset) { return Object.keys(preset.query.sources); };
 
+  // Объединяет основной manifest.js (сегодня -- пишет ds-loader) с произвольным числом
+  // фрагментов из manifest.imports.js (сегодня их никто не производит -- зарезервировано
+  // под отдельный конвертер, см. docs/contract.md "Кто читает и кто пишет манифест").
+  // Слияние -- ТОЛЬКО на чтении, здесь, в ds-webui; ни один производитель не правит чужой
+  // файл. Совпадение имени источника между manifest.js и фрагментом (или между двумя
+  // фрагментами) -- явная ошибка (conflicts), а не молчаливая победа одного из них.
+  var mergeManifests = function (manifest, fragments) {
+    var base = manifest || { generated_at: null, db_max_cnt: 0, sources: [] };
+    var sources = base.sources.slice();
+    var seen = {};
+    sources.forEach(function (s) { seen[s.name] = true; });
+    var conflicts = [];
+    (fragments || []).forEach(function (frag) {
+      (frag.sources || []).forEach(function (s) {
+        if (seen[s.name]) { conflicts.push(s.name); return; }
+        seen[s.name] = true;
+        sources.push(s);
+      });
+    });
+    return { manifest: Object.assign({}, base, { sources: sources }), conflicts: conflicts };
+  };
+
   var createStore = function (reducer, initial) {
     var state = initial;
     var listeners = new Set();
@@ -154,6 +176,7 @@
   var initialState = {
     route: 'build',
     manifest: null,
+    manifestError: null,
     dataDir: null,
     preset: null,
     building: false,
@@ -184,7 +207,14 @@
     switch (a.type) {
 
       case 'manifest/loaded':
-        return Object.assign({}, state, { manifest: a.manifest, dataDir: a.dataDir });
+        return Object.assign({}, state, {
+          manifest: a.manifest,
+          dataDir: a.dataDir,
+          manifestError: (a.conflicts && a.conflicts.length)
+            ? 'Источник(и) с таким именем уже есть в другом файле манифеста: ' + a.conflicts.join(', ')
+              + ' -- переименуйте источник или убедитесь, что он не описан в двух файлах сразу.'
+            : null
+        });
 
       case 'route/set':
         return Object.assign({}, state, { route: a.route });
@@ -525,6 +555,7 @@
 
   return {
     isStale: isStale, manifestSource: manifestSource, selectedNames: selectedNames,
+    mergeManifests: mergeManifests,
     createStore: createStore, basePreset: basePreset, normalizePreset: normalizePreset,
     normalizeColWidths: normalizeColWidths, normalizeConditions: normalizeConditions,
     initialState: initialState, reducer: reducer,

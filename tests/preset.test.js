@@ -384,3 +384,61 @@ test('reducer: build/success сбрасывает adv/sortBy/quickOpen, но н�
   assert.deepEqual(next.quickOpen, {});
   assert.equal(next.quickValuesLimit, 3);
 });
+
+// --- mergeManifests: слияние manifest.js + фрагментов manifest.imports.js ------
+// (см. docs/contract.md "Кто читает и кто пишет манифест" -- слияние только на
+// чтении, в ds-webui; ни manifest.js, ни фрагменты не правятся друг другом)
+
+test('mergeManifests: без фрагментов -- манифест как есть', () => {
+  const manifest = { generated_at: 1, db_max_cnt: 5, sources: [{ name: 'CRM' }] };
+  const r = App.mergeManifests(manifest, []);
+  assert.deepEqual(r.manifest.sources, [{ name: 'CRM' }]);
+  assert.deepEqual(r.conflicts, []);
+});
+
+test('mergeManifests: manifest.js === null -- фрагменты всё равно подхватываются', () => {
+  const r = App.mergeManifests(null, [{ sources: [{ name: 'Imported' }] }]);
+  assert.deepEqual(r.manifest.sources, [{ name: 'Imported' }]);
+  assert.deepEqual(r.conflicts, []);
+});
+
+test('mergeManifests: разные источники из нескольких фрагментов объединяются', () => {
+  const manifest = { sources: [{ name: 'CRM' }] };
+  const r = App.mergeManifests(manifest, [
+    { sources: [{ name: 'Imported1' }] },
+    { sources: [{ name: 'Imported2' }] }
+  ]);
+  assert.deepEqual(r.manifest.sources.map((s) => s.name), ['CRM', 'Imported1', 'Imported2']);
+  assert.deepEqual(r.conflicts, []);
+});
+
+test('mergeManifests: совпадение имени с manifest.js -- конфликт, источник манифеста не трогается', () => {
+  const manifest = { sources: [{ name: 'CRM' }] };
+  const r = App.mergeManifests(manifest, [{ sources: [{ name: 'CRM' }] }]);
+  assert.deepEqual(r.manifest.sources, [{ name: 'CRM' }]);
+  assert.deepEqual(r.conflicts, ['CRM']);
+});
+
+test('mergeManifests: совпадение имени между двумя фрагментами -- тоже конфликт', () => {
+  const r = App.mergeManifests(null, [
+    { sources: [{ name: 'Imported' }] },
+    { sources: [{ name: 'Imported' }] }
+  ]);
+  assert.deepEqual(r.manifest.sources.map((s) => s.name), ['Imported']);
+  assert.deepEqual(r.conflicts, ['Imported']);
+});
+
+test("reducer: manifest/loaded без conflicts -- manifestError не выставляется", () => {
+  const s = App.reducer(App.initialState, {
+    type: 'manifest/loaded', manifest: { sources: [] }, dataDir: 'data', conflicts: []
+  });
+  assert.equal(s.manifestError, null);
+});
+
+test('reducer: manifest/loaded с conflicts -- manifestError описывает конфликтующие имена', () => {
+  const s = App.reducer(App.initialState, {
+    type: 'manifest/loaded', manifest: { sources: [] }, dataDir: 'data', conflicts: ['CRM', 'ERP']
+  });
+  assert.match(s.manifestError, /CRM/);
+  assert.match(s.manifestError, /ERP/);
+});
