@@ -207,6 +207,15 @@ input[type=text], select {
 }
 .cond-list-tools { display: flex; align-items: center; gap: .6rem; font-size: .85em; }
 
+/* build: «Группировка» -- каждый уровень (.condition) + под ним его агрегаторы
+   для итоговой строки (.agg-list/.agg-row), с лёгким отступом+рамкой слева,
+   чтобы видеть "это принадлежит уровню выше", и своей кнопкой добавления. */
+.condition-block { display: flex; flex-direction: column; gap: .3rem; }
+.agg-list { display: flex; flex-direction: column; gap: .3rem; padding-left: 1.4rem; border-left: 2px solid var(--border); }
+.agg-row select:first-child { min-width: 10rem; }
+.agg-foot { padding-left: 1.4rem; margin-top: 0; }
+.agg-foot .link:disabled { opacity: .45; cursor: default; }
+
 /* «Расширенный фильтр» / «Экспорт» — скрытые по умолчанию области НАД
    таблицей (не отдельные страницы — данные таблицы остаются на виду, пока с
    ними работаешь): обёртка .advfilter схлопывается в ноль, когда пусто (обе
@@ -363,6 +372,13 @@ table.data .quick-values-item {
   text-align: left; border: none; background: transparent; color: var(--fg);
   padding: .25rem .3rem; cursor: pointer; font-size: .85em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* flex-shrink:0 обязателен: у overflow:hidden-элемента автоматический
+     минимальный размер по главной оси флекс-контейнера -- 0, а не высота
+     содержимого (спека flexbox). Без этой строки при большом количестве
+     значений строки сжимаются почти до нуля вместо появления скролла --
+     overflow-y:auto у .quick-values должен ловить переполнение, а не
+     флексбокс-сжатие строк. */
+  flex-shrink: 0;
 }
 table.data .quick-values-item:hover { background: var(--head-bg); color: var(--accent); }
 table.data .quick-values-limit {
@@ -381,4 +397,8 @@ table.data td.unparsed {
 }
 table.data tr.grp td { background: var(--head-bg); cursor: pointer; font-weight: 500; }
 table.data tr.grp .caret { display: inline-block; width: 1em; color: var(--muted); }
+/* агрегат (сумма/среднее/...) в итоговой строке группы -- см. view-table.js::
+   renderLevel/aggByColumn, Entities.aggregateGroup; выровнен по правому краю,
+   как число, а не как обычный текст ячейки. */
+table.data tr.grp td.agg-cell { text-align: right; }
 table.data tr.member td:first-child { padding-left: 1.5rem; }

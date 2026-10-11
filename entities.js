@@ -178,6 +178,43 @@
     return true;
   };
 
+  // Агрегаторы для итоговых строк группировки (view-table.js), по типу индикатора --
+  // какие функции предлагать в UI. Переиспользует Formula.FUNCTIONS целиком, ничего
+  // нового не считая: SUM/AVG/MIN/MAX уже пропускают нечисловые/отсутствующие значения,
+  // а __k для bool уже хранит true/false как 1/0 (typeCell выше) -- обычный SUM поверх
+  // __k и есть "сумма, где true считается за 1", отдельная функция не нужна. Добавить
+  // агрегатор для нового типа (например, text) -- просто дописать элемент сюда (и,
+  // если понадобится функция, которой нет в formula.js::FUNCTIONS, добавить её туда);
+  // aggregateGroup ниже ничего не знает про конкретные типы/функции напрямую.
+  var AGG_FUNCS_BY_TYPE = {
+    number: ['SUM', 'AVG', 'MIN', 'MAX', 'COUNT_NONEMPTY'],
+    date: ['MIN', 'MAX', 'COUNT_NONEMPTY'],
+    bool: ['SUM', 'COUNT_NONEMPTY'],
+    text: []
+  };
+  var AGG_FUNC_LABELS = { SUM: 'сумма', AVG: 'среднее', MIN: 'минимум', MAX: 'максимум', COUNT_NONEMPTY: 'количество' };
+
+  // rows -- строки группы ПОСЛЕ parseTypes (row.__k[column] -- числовой/epoch-ms/0-1
+  // ключ), column -- имя столбца-индикатора, entity -- его сущность (тип + формат для
+  // дат), fn -- имя функции из AGG_FUNCS_BY_TYPE[entity.type]. undefined, если функция
+  // не подходит типу или результата нет (все значения пусты/нечисловые) -- показывается
+  // как пустая ячейка, не как 0/ошибка.
+  var aggregateGroup = function (rows, column, entity, fn) {
+    var type = (entity && entity.type) || 'text';
+    if (!AGG_FUNCS_BY_TYPE[type] || AGG_FUNCS_BY_TYPE[type].indexOf(fn) === -1) return undefined;
+    var fnImpl = Formula.FUNCTIONS[fn];
+    if (!fnImpl) return undefined;
+    var args = rows.map(function (r) { return r.__k ? r.__k[column] : undefined; });
+    var result = fnImpl(args);
+    if (result === undefined) return undefined;
+    if (fn === 'COUNT_NONEMPTY') return String(result);
+    if (type === 'date') {
+      var outFmt = (entity.parse && entity.parse.date_out) || 'YYYY-MM-DD';
+      return formatDate(Number(result), outFmt);
+    }
+    return _numStr(Number(result));
+  };
+
   // Буквы входов по порядку (A, B, ..., Z, AA, ...) -- та же нумерация, что в UI
   // (view-entities.js), formula.js::letterFor.
   var lettersForInputs = function (inputs) {
@@ -388,7 +425,8 @@
     entityOutNames: entityOutNames, resolveEntities: resolveEntities, parseTypes: parseTypes,
     presetColumns: presetColumns, _entityColumns: _entityColumns, mergeEntity: mergeEntity,
     normalizeEntities: normalizeEntities, columnTypesFor: columnTypesFor, columnType: columnType,
-    lettersForInputs: lettersForInputs
+    lettersForInputs: lettersForInputs,
+    AGG_FUNCS_BY_TYPE: AGG_FUNCS_BY_TYPE, AGG_FUNC_LABELS: AGG_FUNC_LABELS, aggregateGroup: aggregateGroup
   };
 
   return api;

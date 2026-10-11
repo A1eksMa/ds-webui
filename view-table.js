@@ -30,6 +30,8 @@
       applySort = Dataset.applySort, findNextMatch = Dataset.findNextMatch,
       uniqueValues = Dataset.uniqueValues, OP_LIST = Dataset.OP_LIST;
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
+  var AGG_FUNCS_BY_TYPE = Entities.AGG_FUNCS_BY_TYPE, AGG_FUNC_LABELS = Entities.AGG_FUNC_LABELS,
+      aggregateGroup = Entities.aggregateGroup;
   var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl,
       quickValueInput = ViewCommon.quickValueInput;
   var FUNNEL_SVG = ViewCommon.FUNNEL_SVG, SEARCH_SVG = ViewCommon.SEARCH_SVG, SORT_SVG = ViewCommon.SORT_SVG,
@@ -94,21 +96,101 @@
       );
     };
 
-    var groupRow = function (col, i) {
-      return el('div', { class: 'condition' },
-        el('select', { onchange: function (e) { d({ type: 'group/update', index: i, column: e.target.value }); } },
-          [el('option', { value: '' }, 'поле…')].concat(cols.map(function (c) {
-            return el('option', { value: c, selected: c === col }, c);
+    var entMapForAgg = {};
+    (state.dataset.entities || []).forEach(function (e) { entMapForAgg[e.name] = e; });
+    var groupedColumns = state.groupBy.map(function (g) { return g.column; }).filter(Boolean);
+
+    // Столбцы, уже занятые агрегатором НА ЛЮБОМ уровне, кроме самого редактируемого
+    // выбора (exceptLevel/exceptAggIdx) -- один столбец не агрегируем по-разному сразу
+    // в нескольких местах (store.js::groupAgg/* не валидирует это, UI не даёт выбрать).
+    var usedAggColumns = function (exceptLevel, exceptAggIdx) {
+      var out = [];
+      state.groupBy.forEach(function (g, gi) {
+        (g.agg || []).forEach(function (a, ai) {
+          if (gi === exceptLevel && ai === exceptAggIdx) return;
+          if (a.column) out.push(a.column);
+        });
+      });
+      return out;
+    };
+
+    // Столбцы, для которых вообще есть хоть один агрегатор (число/дата/булево --
+    // AGG_FUNCS_BY_TYPE), минус уже занятые группировкой или другим агрегатором;
+    // curColumn -- всегда остаётся в списке, даже если "занят" (это его собственное
+    // текущее значение).
+    var aggColumnOptions = function (exceptLevel, exceptAggIdx, curColumn) {
+      var used = groupedColumns.concat(usedAggColumns(exceptLevel, exceptAggIdx));
+      return cols.filter(function (c) {
+        if (c === curColumn) return true;
+        if (used.indexOf(c) !== -1) return false;
+        var t = (entMapForAgg[c] && entMapForAgg[c].type) || 'text';
+        return (AGG_FUNCS_BY_TYPE[t] || []).length > 0;
+      });
+    };
+
+    var aggRow = function (levelIdx, agg, ai) {
+      var patch = function (p) { d({ type: 'groupAgg/update', index: levelIdx, aggIndex: ai, patch: p }); };
+      var options = aggColumnOptions(levelIdx, ai, agg.column);
+      var type = (entMapForAgg[agg.column] && entMapForAgg[agg.column].type) || 'text';
+      var fns = AGG_FUNCS_BY_TYPE[type] || [];
+      return el('div', { class: 'condition agg-row' },
+        el('select', {
+          onchange: function (e) {
+            var newCol = e.target.value;
+            var newType = (entMapForAgg[newCol] && entMapForAgg[newCol].type) || 'text';
+            var newFns = AGG_FUNCS_BY_TYPE[newType] || [];
+            patch({ column: newCol, fn: newFns.indexOf(agg.fn) !== -1 ? agg.fn : (newFns[0] || '') });
+          }
+        },
+          [el('option', { value: '' }, 'поле…')].concat(options.map(function (c) {
+            return el('option', { value: c, selected: c === agg.column }, c);
           }))),
-        el('button', {
-          class: 'link', title: 'выше', disabled: i === 0,
-          onclick: function () { d({ type: 'group/move', index: i, dir: -1 }); }
-        }, '↑'),
-        el('button', {
-          class: 'link', title: 'ниже', disabled: i === state.groupBy.length - 1,
-          onclick: function () { d({ type: 'group/move', index: i, dir: 1 }); }
-        }, '↓'),
-        el('button', { class: 'link', onclick: function () { d({ type: 'group/remove', index: i }); } }, '✕')
+        el('select', { disabled: !fns.length, onchange: function (e) { patch({ fn: e.target.value }); } },
+          fns.map(function (f) {
+            return el('option', { value: f, selected: f === agg.fn }, AGG_FUNC_LABELS[f] || f);
+          })),
+        el('button', { class: 'link', onclick: function () { d({ type: 'groupAgg/remove', index: levelIdx, aggIndex: ai }); } }, '✕')
+      );
+    };
+
+    // Уровень группировки + (ниже) его агрегаторы для итоговой строки -- см.
+    // docs/contract.md и store.js (groupBy теперь [{column, agg}], не просто строка).
+    var groupRow = function (g, i) {
+      var colOptions = cols.filter(function (c) { return c === g.column || groupedColumns.indexOf(c) === -1; });
+      var addDisabled = !aggColumnOptions(i, -1, '').length;
+      return el('div', { class: 'condition-block' },
+        el('div', { class: 'condition' },
+          el('select', { onchange: function (e) { d({ type: 'group/update', index: i, patch: { column: e.target.value } }); } },
+            [el('option', { value: '' }, 'поле…')].concat(colOptions.map(function (c) {
+              return el('option', { value: c, selected: c === g.column }, c);
+            }))),
+          el('button', {
+            class: 'link', title: 'выше', disabled: i === 0,
+            onclick: function () { d({ type: 'group/move', index: i, dir: -1 }); }
+          }, '↑'),
+          el('button', {
+            class: 'link', title: 'ниже', disabled: i === state.groupBy.length - 1,
+            onclick: function () { d({ type: 'group/move', index: i, dir: 1 }); }
+          }, '↓'),
+          el('button', { class: 'link', onclick: function () { d({ type: 'group/remove', index: i }); } }, '✕')
+        ),
+        (g.agg || []).length
+          ? el('div', { class: 'agg-list' }, g.agg.map(function (a, ai) { return aggRow(i, a, ai); }))
+          : null,
+        el('div', { class: 'advfilter-foot agg-foot' },
+          el('button', {
+            class: 'link', disabled: addDisabled,
+            title: addDisabled ? 'нет свободных числовых/дата/булевых полей для агрегации' : '',
+            onclick: function () {
+              var opts = aggColumnOptions(i, -1, '');
+              if (!opts.length) return;
+              var c0 = opts[0];
+              var t0 = (entMapForAgg[c0] && entMapForAgg[c0].type) || 'text';
+              var fns0 = AGG_FUNCS_BY_TYPE[t0] || [];
+              d({ type: 'groupAgg/add', index: i, column: c0, fn: fns0[0] || '' });
+            }
+          }, '+ агрегат в итоге')
+        )
       );
     };
 
@@ -227,6 +309,14 @@
   // Курсор поиска "найти следующую" на столбец — чисто навигационное, не в сторе
   // (как и quickDraft, эфемерно, живёт только пока открыта страница).
   var searchCursor = {};
+  // "столбец:режим" панели, которой нужно вернуть фокус+курсор сразу после
+  // ОТКРЫТИЯ (не на каждый ререндер — иначе фокус выдёргивало бы из-под
+  // пользователя при любом не связанном с этой панелью dispatch, например
+  // при правке "Показать N"). Выставляется в toggleQuick прямо перед
+  // dispatch'ем, который открывает панель; считывается и сбрасывается один
+  // раз в quickPanel на следующем render() (см. ViewCommon.quickValueInput
+  // opts.autofocus).
+  var pendingFocus = null;
 
   // Клик куда угодно вне открытой quick-панели (и не по одной из трёх
   // пиктограмм — у них свой onclick, не должен гаситься этим же кликом)
@@ -321,7 +411,7 @@
       var g = document.getElementById('grid');
       var tr = g && g.querySelector('tr[data-ridx="' + idx + '"]');
       if (!tr) return;
-      tr.scrollIntoView({ block: 'center' });
+      tr.scrollIntoView({ block: 'start' });
       tr.classList.add('found');
       setTimeout(function () { tr.classList.remove('found'); }, 1200);
     };
@@ -348,9 +438,18 @@
       revealRow(idx);
     };
 
+    // Открыть/переключить quick-панель столбца. Если это ОТКРЫТИЕ (а не
+    // повторный клик на ту же пиктограмму, который её закроет) — запомнить,
+    // какому инпуту нужно отдать фокус на следующем render() (см.
+    // pendingFocus выше и ViewCommon.quickValueInput opts.autofocus).
+    var toggleQuick = function (c, mode) {
+      if (state.quickOpen[c] !== mode) pendingFocus = c + ':' + mode;
+      d({ type: 'quick/toggle', column: c, mode: mode });
+    };
+
     // Единая quick-панель под пиктограммами: поиск и фильтр — один и тот же
     // визуальный компонент (ViewCommon.quickValueInput), различается только то,
-    // что делает Enter/клик по значению из списка (onApply).
+    // что делает Enter/кнопка (onApply, см. комментарий внутри).
     var quickPanel = function (c) {
       var mode = state.quickOpen[c];
       if (!mode) return null;
@@ -358,10 +457,13 @@
       var appliedValue = advIdx !== -1 ? String(state.adv[advIdx].value || '') : '';
       var draftKey = c + ':' + mode;
       var draft = quickDraft[draftKey] !== undefined ? quickDraft[draftKey] : (mode === 'filter' ? appliedValue : '');
+      var autofocus = pendingFocus === draftKey;
+      if (autofocus) pendingFocus = null;
       var close = function () { delete quickDraft[draftKey]; d({ type: 'quick/toggle', column: c, mode: mode }); };
       return quickValueInput({
         value: draft,
         dirty: mode === 'filter' && draft !== appliedValue,
+        autofocus: autofocus,
         placeholder: mode === 'search' ? 'поиск…' : 'фильтр…',
         title: mode === 'search'
           ? 'Текст + Enter — перейти к следующей строке ниже и закрыть; Esc — закрыть без поиска'
@@ -371,16 +473,18 @@
         values: uniqueValues(state.dataset.rows, c, state.quickValuesLimit),
         limit: state.quickValuesLimit,
         onInput: function (v) { quickDraft[draftKey] = v; },
-        // Применяется и клавишей Ввод, и кнопкой справа, и кликом по значению
-        // из выпадающего списка (все три ведут сюда, см. ViewCommon.quickValueInput)
-        // — во всех трёх случаях: записать значение в черновик (иначе для
-        // поиска, у которого нет "примененного" состояния в сторе, поле после
-        // клика по списку снова показывало бы пусто) и закрыть панель, как
-        // попросил пользователь.
+        // Enter / кнопка справа -- целевое действие + закрытие. Закрываем
+        // ПЕРВЫМ dispatch'ом (рендерит грид с уже закрытой панелью), а
+        // runSearch -- вторым шагом: revealRow ищет <tr> уже в этом новом
+        // DOM и подсвечивает его там. Если бы порядок был обратным — подсветка
+        // попадала бы на узел, который тем же тиком снесёт закрывающий
+        // ререндер, и эффект не был бы виден вовсе (это и была причина
+        // "ничего не происходит" при поиске). Для фильтра порядок не важен
+        // функционально -- оставлен тот же, ради единой механики обоих режимов.
         onApply: function (v) {
           quickDraft[draftKey] = v;
-          if (mode === 'search') runSearch(c, v); else d({ type: 'quick/applyFilter', column: c, value: v });
           d({ type: 'quick/toggle', column: c, mode: mode });
+          if (mode === 'search') runSearch(c, v); else d({ type: 'quick/applyFilter', column: c, value: v });
         },
         onEscape: close,
         onLimitChange: function (v) { d({ type: 'quick/setValuesLimit', value: v }); }
@@ -396,12 +500,12 @@
         el('button', {
           type: 'button', class: 'col-icon' + (state.quickOpen[c] === 'search' ? ' active' : ''),
           title: 'Поиск по столбцу', html: SEARCH_SVG,
-          onclick: function () { d({ type: 'quick/toggle', column: c, mode: 'search' }); }
+          onclick: function () { toggleQuick(c, 'search'); }
         }),
         el('button', {
           type: 'button', class: 'col-icon' + (state.quickOpen[c] === 'filter' ? ' active' : '') + (hasFilter ? ' set' : ''),
           title: 'Быстрый фильтр (содержит)', html: FUNNEL_SVG,
-          onclick: function () { d({ type: 'quick/toggle', column: c, mode: 'filter' }); }
+          onclick: function () { toggleQuick(c, 'filter'); }
         }),
         el('button', {
           type: 'button', class: 'col-icon' + (sortEntry ? ' set' : ''),
@@ -428,10 +532,10 @@
       );
     }));
 
-    // многоуровневая группировка — уровни (state.groupBy) применяются вложенно,
-    // по порядку; поле, которого больше нет среди колонок (устаревший выбор
-    // после смены пресета), пропускается, как и пустое (ещё не выбранное)
-    var activeGroups = (state.groupBy || []).filter(function (c) { return c && cols.indexOf(c) !== -1; });
+    // многоуровневая группировка — уровни (state.groupBy, [{column, agg}]) применяются
+    // вложенно, по порядку; уровень, чьё поле больше не среди колонок (устаревший выбор
+    // после смены пресета), пропускается, как и уровень с пустым полем (ещё не выбрано)
+    var activeGroups = (state.groupBy || []).filter(function (g) { return g.column && cols.indexOf(g.column) !== -1; });
     var bodyRows = [];
 
     if (activeGroups.length) {
@@ -443,7 +547,7 @@
       var collectDeepKeys = function (rows, path) {
         var lvl = activeGroups[path.length];
         if (lvl === undefined) return;
-        var gs = groupBy(function (r) { return String(r[lvl] == null ? '∅' : r[lvl]); })(rows);
+        var gs = groupBy(function (r) { return String(r[lvl.column] == null ? '∅' : r[lvl.column]); })(rows);
         Object.keys(gs).forEach(function (k) {
           var subPath = path.concat([k]);
           allKeys.push(JSON.stringify(subPath));
@@ -463,25 +567,43 @@
           });
           return;
         }
-        var groups = groupBy(function (r) { return String(r[lvl] == null ? '∅' : r[lvl]); })(rows);
+        var groups = groupBy(function (r) { return String(r[lvl.column] == null ? '∅' : r[lvl.column]); })(rows);
         var keys = Object.keys(groups).sort();
+        // Агрегаторы, видимые в итоговой строке ЭТОГО уровня: свои + со ВСЕХ более
+        // глубоких уровней (path.length и глубже) -- агрегатор нижнего слоя всплывает
+        // во все строки-предки, агрегатор верхнего слоя остаётся только там (как
+        // попросил пользователь). Пересчитываем по ПОЛНОМУ набору строк узла
+        // (groups[k]), а не суммируем уже готовые подытоги более глубоких узлов --
+        // иначе AVG/MIN/MAX были бы не "средним/минимумом по узлу", а "средним
+        // средних" и т.п.
+        var aggByColumn = {};
+        for (var li = path.length; li < activeGroups.length; li++) {
+          (activeGroups[li].agg || []).forEach(function (a) { if (a.column) aggByColumn[a.column] = a; });
+        }
         keys.forEach(function (k) {
           var subPath = path.concat([k]);
           var pathKey = JSON.stringify(subPath);
           allKeys.push(pathKey);
           var open = !!state.expanded[pathKey];
-          bodyRows.push(el('tr', { class: 'grp' + (open ? ' open' : '') },
-            el('td', {
-              colspan: cols.length, style: 'padding-left:' + (.5 + path.length * 1.2) + 'rem',
-              onclick: function () { d({ type: 'table/toggleGroup', key: pathKey }); }
-            },
-              el('span', { class: 'caret' }, open ? '▾' : '▸'),
-              ' ', lvl, ' = ', el('strong', {}, k),
-              el('span', { class: 'muted' }, '  (' + groups[k].length + ')')
-            )
-          ));
-          if (open) renderLevel(groups[k], subPath);
-          else collectDeepKeys(groups[k], subPath);
+          var groupRows = groups[k];
+          bodyRows.push(el('tr', {
+            class: 'grp' + (open ? ' open' : ''),
+            onclick: function () { d({ type: 'table/toggleGroup', key: pathKey }); }
+          }, cols.map(function (c) {
+            if (c === lvl.column) {
+              return el('td', { style: 'padding-left:' + (.5 + path.length * 1.2) + 'rem' },
+                el('span', { class: 'caret' }, open ? '▾' : '▸'),
+                ' ', el('strong', {}, k),
+                el('span', { class: 'muted' }, '  (' + groupRows.length + ')')
+              );
+            }
+            var a = aggByColumn[c];
+            if (!a) return el('td', {}, '');
+            var val = aggregateGroup(groupRows, c, entMap[c], a.fn);
+            return el('td', { class: 'agg-cell', title: AGG_FUNC_LABELS[a.fn] || a.fn }, val == null ? '' : val);
+          })));
+          if (open) renderLevel(groupRows, subPath);
+          else collectDeepKeys(groupRows, subPath);
         });
       };
 

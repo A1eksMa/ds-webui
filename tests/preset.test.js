@@ -316,6 +316,46 @@ test('reducer: quick/toggle переключает режим столбца (se
   assert.equal(s2.quickOpen.a, 'filter');
 });
 
+// --- group/* -- уровни группировки (view-table.js::renderAdvFilter); groupAgg/* --
+// агрегаторы итоговой строки, вложенные в свой уровень (store.js: groupBy теперь
+// [{column, agg: [{column, fn}]}], не просто имя столбца) ---
+
+test('reducer: group/add добавляет пустой уровень с пустым agg', () => {
+  const s1 = App.reducer(App.initialState, { type: 'group/add' });
+  assert.deepEqual(s1.groupBy, [{ column: '', agg: [] }]);
+});
+
+test('reducer: group/update меняет column уровня, не трогая его agg', () => {
+  const s0 = Object.assign({}, App.initialState, { groupBy: [{ column: 'a', agg: [{ column: 'price', fn: 'SUM' }] }] });
+  const s1 = App.reducer(s0, { type: 'group/update', index: 0, patch: { column: 'b' } });
+  assert.deepEqual(s1.groupBy, [{ column: 'b', agg: [{ column: 'price', fn: 'SUM' }] }]);
+});
+
+test('reducer: groupAgg/add добавляет агрегатор в agg нужного уровня, другие уровни не трогает', () => {
+  const s0 = Object.assign({}, App.initialState, {
+    groupBy: [{ column: 'a', agg: [] }, { column: 'b', agg: [] }]
+  });
+  const s1 = App.reducer(s0, { type: 'groupAgg/add', index: 1, column: 'price', fn: 'SUM' });
+  assert.deepEqual(s1.groupBy[0].agg, []);
+  assert.deepEqual(s1.groupBy[1].agg, [{ column: 'price', fn: 'SUM' }]);
+});
+
+test('reducer: groupAgg/update патчит один агрегатор по (index, aggIndex)', () => {
+  const s0 = Object.assign({}, App.initialState, {
+    groupBy: [{ column: 'a', agg: [{ column: 'price', fn: 'SUM' }, { column: 'qty', fn: 'AVG' }] }]
+  });
+  const s1 = App.reducer(s0, { type: 'groupAgg/update', index: 0, aggIndex: 1, patch: { fn: 'MAX' } });
+  assert.deepEqual(s1.groupBy[0].agg, [{ column: 'price', fn: 'SUM' }, { column: 'qty', fn: 'MAX' }]);
+});
+
+test('reducer: groupAgg/remove убирает один агрегатор по (index, aggIndex)', () => {
+  const s0 = Object.assign({}, App.initialState, {
+    groupBy: [{ column: 'a', agg: [{ column: 'price', fn: 'SUM' }, { column: 'qty', fn: 'AVG' }] }]
+  });
+  const s1 = App.reducer(s0, { type: 'groupAgg/remove', index: 0, aggIndex: 0 });
+  assert.deepEqual(s1.groupBy[0].agg, [{ column: 'qty', fn: 'AVG' }]);
+});
+
 test('reducer: quick/closeAll закрывает все открытые quick-слоты сразу', () => {
   const s1 = App.reducer(App.initialState, { type: 'quick/toggle', column: 'a', mode: 'search' });
   const s2 = App.reducer(s1, { type: 'quick/toggle', column: 'b', mode: 'filter' });

@@ -202,3 +202,73 @@ test('columnType: находит тип по preset.query.sources + manifest.sou
   const type = App.columnType(preset, [{ name: 'CRM', label_types: { revenue: 'number' } }], 'revenue');
   assert.equal(type, 'number');
 });
+
+// aggregateGroup: итоговые строки группировки (view-table.js) -- переиспользует
+// Formula.FUNCTIONS поверх row.__k (ключ после parseTypes), не парсинг строки заново.
+// AGG_FUNCS_BY_TYPE -- какие функции вообще допустимы для типа (UI в view-table.js
+// их же использует, чтобы не предлагать несовместимые).
+
+const krows = (vals) => vals.map((v) => ({ __k: { x: v } }));
+
+test('AGG_FUNCS_BY_TYPE: число/дата/булево имеют агрегаторы, текст -- пока нет', () => {
+  assert.ok(App.AGG_FUNCS_BY_TYPE.number.length > 0);
+  assert.ok(App.AGG_FUNCS_BY_TYPE.date.length > 0);
+  assert.ok(App.AGG_FUNCS_BY_TYPE.bool.length > 0);
+  assert.deepEqual(App.AGG_FUNCS_BY_TYPE.text, []);
+});
+
+test('aggregateGroup: число -- SUM/AVG/MIN/MAX', () => {
+  const rows = krows([10, 20, 30]);
+  const e = { name: 'x', type: 'number' };
+  assert.equal(App.aggregateGroup(rows, 'x', e, 'SUM'), '60');
+  assert.equal(App.aggregateGroup(rows, 'x', e, 'AVG'), '20');
+  assert.equal(App.aggregateGroup(rows, 'x', e, 'MIN'), '10');
+  assert.equal(App.aggregateGroup(rows, 'x', e, 'MAX'), '30');
+});
+
+test('aggregateGroup: число -- нечисловые/отсутствующие __k пропускаются (как в formula.js)', () => {
+  const rows = krows([10, null, undefined, 20]);
+  assert.equal(App.aggregateGroup(rows, 'x', { name: 'x', type: 'number' }, 'SUM'), '30');
+});
+
+test('aggregateGroup: число -- все значения пусты -> undefined (не "0")', () => {
+  const rows = krows([null, undefined]);
+  assert.equal(App.aggregateGroup(rows, 'x', { name: 'x', type: 'number' }, 'SUM'), undefined);
+});
+
+test('aggregateGroup: COUNT_NONEMPTY считает непустые независимо от типа', () => {
+  const rows = krows([10, null, 20, undefined]);
+  assert.equal(App.aggregateGroup(rows, 'x', { name: 'x', type: 'number' }, 'COUNT_NONEMPTY'), '2');
+});
+
+test('aggregateGroup: дата -- MIN/MAX форматируются как дата, не как число', () => {
+  const d1 = App.parseDate('2024-01-10').ms;
+  const d2 = App.parseDate('2024-03-01').ms;
+  const rows = krows([d1, d2]);
+  const e = { name: 'x', type: 'date' };
+  assert.equal(App.aggregateGroup(rows, 'x', e, 'MIN'), '2024-01-10');
+  assert.equal(App.aggregateGroup(rows, 'x', e, 'MAX'), '2024-03-01');
+});
+
+test('aggregateGroup: дата -- учитывает entity.parse.date_out', () => {
+  const ms = App.parseDate('2024-01-10').ms;
+  const e = { name: 'x', type: 'date', parse: { date_out: 'DD.MM.YYYY' } };
+  assert.equal(App.aggregateGroup(krows([ms]), 'x', e, 'MIN'), '10.01.2024');
+});
+
+test('aggregateGroup: булево -- SUM считает true за 1, без новой функции (через __k=0/1)', () => {
+  // typeCell уже кодирует bool как __k: 1/0 -- обычный SUM поверх этого и есть
+  // "сумма, где true считается за 1", см. комментарий в entities.js.
+  const rows = krows([1, 0, 1, 1]);
+  assert.equal(App.aggregateGroup(rows, 'x', { name: 'x', type: 'bool' }, 'SUM'), '3');
+});
+
+test('aggregateGroup: функция не из списка для этого типа -> undefined', () => {
+  // AVG не входит в AGG_FUNCS_BY_TYPE.bool -- защита от рассинхрона UI/данных
+  // (например, старое state.groupBy после смены типа индикатора).
+  assert.equal(App.aggregateGroup(krows([1, 0]), 'x', { name: 'x', type: 'bool' }, 'AVG'), undefined);
+});
+
+test('aggregateGroup: неизвестный тип (text, агрегаторов пока нет) -> undefined для любой функции', () => {
+  assert.equal(App.aggregateGroup(krows(['a', 'b']), 'x', { name: 'x', type: 'text' }, 'COUNT_NONEMPTY'), undefined);
+});

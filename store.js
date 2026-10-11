@@ -182,7 +182,12 @@
     building: false,
     buildError: null,
     dataset: null,
-    groupBy: [],             // список полей группировки — применяются последовательно (вложенно)
+    // список уровней группировки — применяются последовательно (вложенно). Каждый
+    // уровень: { column, agg: [{column, fn}] } -- agg -- поля, агрегируемые в итоговой
+    // строке ЭТОГО уровня (см. view-table.js::renderLevel и docs/contract.md про то, что
+    // агрегатор глубокого уровня виден и в итогах всех уровней НАД ним, а агрегатор
+    // верхнего уровня -- только там).
+    groupBy: [],
     hideEmpty: false,
     expanded: {},
     srcOpen: {},              // конструктор: у каких источников развёрнут список показателей
@@ -384,11 +389,11 @@
         });
 
       case 'group/add':
-        return Object.assign({}, state, { groupBy: state.groupBy.concat(['']) });
+        return Object.assign({}, state, { groupBy: state.groupBy.concat([{ column: '', agg: [] }]) });
 
       case 'group/update':
         return Object.assign({}, state, {
-          groupBy: state.groupBy.map(function (c, i) { return i === a.index ? a.column : c; }),
+          groupBy: state.groupBy.map(function (g, i) { return i === a.index ? Object.assign({}, g, a.patch) : g; }),
           expanded: {}
         });
 
@@ -402,6 +407,35 @@
         return Object.assign({}, state, {
           groupBy: _swap(state.groupBy, a.index, a.index + a.dir),
           expanded: {}
+        });
+
+      // --- агрегаторы итоговой строки группировки (view-table.js), вложены в свой
+      // уровень group/*: {column, fn} -- column -- какой столбец агрегировать, fn --
+      // имя функции из Entities.AGG_FUNCS_BY_TYPE[тип этого столбца] (UI уже выбрал
+      // допустимую комбинацию, редьюсер не валидирует типы -- это UI-слой view-table.js).
+      case 'groupAgg/add':
+        return Object.assign({}, state, {
+          groupBy: state.groupBy.map(function (g, i) {
+            return i === a.index ? Object.assign({}, g, { agg: g.agg.concat([{ column: a.column, fn: a.fn }]) }) : g;
+          })
+        });
+
+      case 'groupAgg/update':
+        return Object.assign({}, state, {
+          groupBy: state.groupBy.map(function (g, i) {
+            if (i !== a.index) return g;
+            return Object.assign({}, g, {
+              agg: g.agg.map(function (x, j) { return j === a.aggIndex ? Object.assign({}, x, a.patch) : x; })
+            });
+          })
+        });
+
+      case 'groupAgg/remove':
+        return Object.assign({}, state, {
+          groupBy: state.groupBy.map(function (g, i) {
+            if (i !== a.index) return g;
+            return Object.assign({}, g, { agg: g.agg.filter(function (_, j) { return j !== a.aggIndex; }) });
+          })
         });
 
       case 'table/toggleHideEmpty':

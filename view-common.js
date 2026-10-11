@@ -90,16 +90,25 @@
   // Поле ввода под пиктограммами «поиск»/«фильтр» в заголовке столбца
   // (view-table.js): один и тот же визуальный компонент для обоих режимов --
   // различается только applyIcon/applyTitle/placeholder и что делает onApply
-  // (поиск -- переход к строке, фильтр -- contains-условие в state.adv), как
-  // и попросил пользователь. Выпадающий список первых N уникальных значений
-  // столбца (opts.values, уже посчитан вызывающей стороной через
-  // Dataset.uniqueValues) + общая настройка "Показать N" под ним; клик по
-  // значению из списка идёт через тот же onApply, что и Enter/кнопка --
-  // opts.onApply сам отвечает и за запись значения в поле (черновик), и за
-  // закрытие панели (view-table.js::quickPanel). Появляется по клику на
-  // пиктограмму; закрывается по Enter, клику вне панели (documents click,
-  // см. view-table.js::attachDocCloseListener) или повторному клику на
-  // пиктограмму.
+  // (поиск -- переход к строке, фильтр -- contains-условие в state.adv).
+  // Два разных действия, обе должны быть одинаковы для поиска и фильтра:
+  //  - клик по значению из выпадающего списка -- только ПОДСТАВЛЯЕТ текст в
+  //    поле (прямая мутация DOM-инпута, без dispatch) и ставит курсор в конец
+  //    подставленного значения; панель НЕ закрывается и ничего не
+  //    применяется -- пользователь может дописать/изменить текст дальше.
+  //    Раньше клик по списку шёл через onApply (применял и закрывал сразу),
+  //    из-за чего в режиме поиска "ничего не происходило" на вид, а в режиме
+  //    фильтра — немедленно закрывало область, не давая поправить текст.
+  //  - Enter (в поле) или клик по кнопке справа -- opts.onApply: целевое
+  //    действие (поиск/фильтр) + закрытие панели (view-table.js::quickPanel).
+  // opts.autofocus -- панель только что открыта (view-table.js::toggleQuick)
+  // -- поставить фокус и курсор в конец текущего значения; требует живого
+  // DOM-узла, поэтому через requestAnimationFrame (сразу после открытия
+  // инпут ещё не вставлен в document синхронно). Выпадающий список первых N
+  // уникальных значений столбца (opts.values, Dataset.uniqueValues) + общая
+  // настройка "Показать N" под ним. Появляется по клику на пиктограмму;
+  // закрывается по Enter, клику вне панели (document click, см.
+  // view-table.js::attachDocCloseListener) или повторному клику на пиктограмму.
   var quickValueInput = function (opts) {
     var input = el('input', {
       type: 'text', class: 'quick-input', value: opts.value || '',
@@ -110,6 +119,13 @@
         else if (e.key === 'Escape' && opts.onEscape) { e.preventDefault(); opts.onEscape(); }
       }
     });
+    if (opts.autofocus && typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(function () {
+        input.focus();
+        var end = input.value.length;
+        if (input.setSelectionRange) input.setSelectionRange(end, end);
+      });
+    }
     var field = el('div', { class: 'quick-input-field' + (opts.dirty ? ' dirty' : '') },
       input,
       el('button', {
@@ -121,7 +137,12 @@
       ? el('div', { class: 'quick-values' }, opts.values.map(function (v) {
           return el('button', {
             type: 'button', class: 'quick-values-item', title: v,
-            onclick: function () { opts.onApply(v); }
+            onclick: function () {
+              input.value = v;
+              if (opts.onInput) opts.onInput(v);
+              input.focus();
+              if (input.setSelectionRange) input.setSelectionRange(v.length, v.length);
+            }
           }, v);
         }))
       : null;
@@ -172,23 +193,29 @@
 
   // Пиктограмма «сортировка» — привычная воронка (тот же визуальный язык,
   // что и у фильтра, FUNNEL_SVG выше), по запросу пользователя: без
-  // сортировки — воронка-контур (не спутать с залитой воронкой фильтра
-  // рядом); по возрастанию — ПЕРЕВЁРНУТАЯ воронка (раструб вниз) со
-  // стрелкой вверх; по убыванию — обычная воронка (раструб вверх, горлышко
-  // внизу) со стрелкой вниз. Один и тот же viewBox у всех трёх — чтобы
-  // пиктограмма не "прыгала" при появлении/исчезновении стрелки.
+  // сортировки — три полоски разной ширины (лестница), левый край у всех
+  // одной высоты -- прямоугольный треугольник, не воронка (раньше была
+  // воронка-контур, визуально путалась с залитой воронкой фильтра рядом).
+  // По возрастанию -- широкая внизу, узкая вверху (треугольник остриём
+  // вверх); по убыванию -- зеркально, широкая вверху. Несортированное
+  // состояние -- тот же стиль "три полоски", но все одной ширины (гамбургер),
+  // чтобы не вводить третью непохожую метафору. Один и тот же viewBox у всех
+  // трёх -- пиктограмма не "прыгает" при переключении состояния.
   var SORT_SVG =
     '<svg viewBox="0 0 16 14" width="13" height="12" aria-hidden="true" focusable="false">'
-    + '<polygon points="0,0 12,0 7,7 7,13 5,13 5,7" fill="none" stroke="currentColor" stroke-width="1.3" '
-    + 'stroke-linejoin="round"/></svg>';
+    + '<rect x="0" y="0" width="16" height="3" rx="1" fill="currentColor"/>'
+    + '<rect x="0" y="5.5" width="16" height="3" rx="1" fill="currentColor"/>'
+    + '<rect x="0" y="11" width="16" height="3" rx="1" fill="currentColor"/></svg>';
   var SORT_ASC_SVG =
     '<svg viewBox="0 0 16 14" width="13" height="12" aria-hidden="true" focusable="false">'
-    + '<polygon points="0,14 12,14 7,7 7,1 5,1 5,7" fill="currentColor"/>'
-    + '<polygon points="13,8 16,8 14.5,4" fill="currentColor"/></svg>';
+    + '<rect x="0" y="0" width="5" height="3" rx="1" fill="currentColor"/>'
+    + '<rect x="0" y="5.5" width="10" height="3" rx="1" fill="currentColor"/>'
+    + '<rect x="0" y="11" width="16" height="3" rx="1" fill="currentColor"/></svg>';
   var SORT_DESC_SVG =
     '<svg viewBox="0 0 16 14" width="13" height="12" aria-hidden="true" focusable="false">'
-    + '<polygon points="0,0 12,0 7,7 7,13 5,13 5,7" fill="currentColor"/>'
-    + '<polygon points="13,6 16,6 14.5,10" fill="currentColor"/></svg>';
+    + '<rect x="0" y="0" width="16" height="3" rx="1" fill="currentColor"/>'
+    + '<rect x="0" y="5.5" width="10" height="3" rx="1" fill="currentColor"/>'
+    + '<rect x="0" y="11" width="5" height="3" rx="1" fill="currentColor"/></svg>';
 
   // Главное меню в навбаре. «Настройки» и «Индикаторы» — настоящие страницы
   // (полностью меняют вид экрана, это логично отдельными экранами): на
