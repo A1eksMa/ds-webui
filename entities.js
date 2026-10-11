@@ -306,15 +306,27 @@
     return { columns: ds.columns, rows: rows };
   };
 
-  // список столбцов из пресета (без манифеста — для дефолтов в редьюсере)
-  var presetColumns = function (preset) {
+  // Единственная реализация "список выбранных полей пресета" (квалификация
+  // имён -- "Источник.показатель" при >1 источника, иначе голое имя). Раньше
+  // было три слегка расходящиеся копии (здесь, view-build.js, view-entities.js);
+  // расхождение было не только в дублировании, но и в поведении: без
+  // manifestSources источник с ещё не сузившимся выбором (labels: null --
+  // старый/загруженный пресет, "выбраны все поля") давал пустой список вместо
+  // полного. manifestSources — опционален (store.js дёргает эту функцию и до
+  // того, как манифест прочитан, напр. в preset/addEntity при пустом state.manifest).
+  var presetColumns = function (preset, manifestSources) {
     var names = Object.keys(preset.query.sources);
     var multi = names.length > 1;
+    var sources = manifestSources || [];
     var out = [];
     names.forEach(function (n) {
-      (preset.query.sources[n].labels || []).forEach(function (l) {
-        out.push(multi ? n + '.' + l : l);
-      });
+      var explicit = preset.query.sources[n].labels;
+      var labels = explicit;
+      if (!labels) {
+        var ms = sources.find(function (s) { return s.name === n; });
+        labels = ms ? [ms.key].concat(ms.labels) : [];
+      }
+      labels.forEach(function (l) { out.push(multi ? n + '.' + l : l); });
     });
     return out;
   };
@@ -350,12 +362,12 @@
     return columnTypesFor(sourceLabels, manifestSources)[column] || 'text';
   };
 
-  var _entityColumns = function (preset) {
+  var entityColumns = function (preset, manifestSources) {
     var used = {};
     preset.view.entities.forEach(function (e) {
       if (e.from && e.from.kind === 'field' && e.from.column) used[e.from.column] = 1;
     });
-    return { all: presetColumns(preset), used: used };
+    return { all: presetColumns(preset, manifestSources), used: used };
   };
 
   var mergeEntity = function (cur, patch) {
@@ -418,12 +430,12 @@
   };
 
   var api = {
-    DEFAULT_COL_W: DEFAULT_COL_W, MIN_COL_W: MIN_COL_W, colWidthPx: colWidthPx,
+    MIN_COL_W: MIN_COL_W, colWidthPx: colWidthPx,
     ENTITY_TYPES: ENTITY_TYPES, ENTITY_KINDS: ENTITY_KINDS,
     parseNum: parseNum, parseDate: parseDate, formatDate: formatDate, parseBool: parseBool,
     typeCell: typeCell, resolveCell: resolveCell, implicitEntities: implicitEntities,
     entityOutNames: entityOutNames, resolveEntities: resolveEntities, parseTypes: parseTypes,
-    presetColumns: presetColumns, _entityColumns: _entityColumns, mergeEntity: mergeEntity,
+    presetColumns: presetColumns, entityColumns: entityColumns, mergeEntity: mergeEntity,
     normalizeEntities: normalizeEntities, columnTypesFor: columnTypesFor, columnType: columnType,
     lettersForInputs: lettersForInputs,
     AGG_FUNCS_BY_TYPE: AGG_FUNCS_BY_TYPE, AGG_FUNC_LABELS: AGG_FUNC_LABELS, aggregateGroup: aggregateGroup

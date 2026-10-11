@@ -20,6 +20,33 @@
   var OPERATORS = Dataset.OPERATORS, OP_LIST = Dataset.OP_LIST, OP_NO_VALUE = Dataset.OP_NO_VALUE,
       parseList = Dataset.parseList;
 
+  // <select> с первой опцией-плейсхолдером ("поле…", "—", ...) — общий вид для
+  // всех select'ов выбора поля/столбца на «Настройках», «Индикаторах»,
+  // расширенном фильтре (условия/группировка/сортировка/агрегаты).
+  var fieldSelect = function (value, options, onChange, placeholderLabel) {
+    return el('select', { onchange: function (e) { onChange(e.target.value); } },
+      [el('option', { value: '' }, placeholderLabel)].concat(options.map(function (c) {
+        return el('option', { value: c, selected: c === value }, c);
+      })));
+  };
+
+  // Три кнопки ↑/↓/✕ для строки в редактируемом списке (условия, уровни
+  // группировки/сортировки, входы/список сущностей) — disabled+title на
+  // границах списка у ↑/↓ одинаково везде (раньше было по-разному: где-то
+  // есть, где-то нет — путало, выглядело как будто кнопка не работает).
+  // opts: {onUp, onDown, onRemove, upDisabled, downDisabled, upTitle, downTitle,
+  // removeTitle} — upTitle/downTitle/removeTitle опциональны (не у каждого
+  // списка кнопка ✕ нуждается в поясняющем title).
+  var moveRemoveButtons = function (opts) {
+    var upAttrs = { class: 'link', disabled: !!opts.upDisabled, onclick: opts.onUp };
+    if (opts.upTitle) upAttrs.title = opts.upTitle;
+    var downAttrs = { class: 'link', disabled: !!opts.downDisabled, onclick: opts.onDown };
+    if (opts.downTitle) downAttrs.title = opts.downTitle;
+    var removeAttrs = { class: 'link', onclick: opts.onRemove };
+    if (opts.removeTitle) removeAttrs.title = opts.removeTitle;
+    return [el('button', upAttrs, '↑'), el('button', downAttrs, '↓'), el('button', removeAttrs, '✕')];
+  };
+
   // --- строка условия: общие контролы для «Конструктора» и расширенного фильтра ---
   var opSelect = function (curOp, onChange) {
     return el('select', { onchange: function (e) { onChange(e.target.value); } },
@@ -58,6 +85,22 @@
     });
   };
 
+  // Строка условия отбора: [опциональный leading-узел] + поле + оператор +
+  // значение + ✕. Используется и в conditionsBlock (без leading — «Настройки»/
+  // «Индикаторы»), и напрямую в renderAdvFilter::advRow (view-table.js,
+  // leading — селектор И/ИЛИ между строками) — раньше advRow был почти точной
+  // копией этой функции, с одним этим отличием.
+  var conditionRow = function (cond, fields, onPatch, onRemove, leading) {
+    var patch = function (p) { onPatch(p); };
+    return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
+      leading || null,
+      fieldSelect(cond.field, fields, function (v) { patch({ field: v }); }, 'поле…'),
+      opSelect(cond.op, function (v) { patch({ op: v }); }),
+      valueControl(cond.op, cond.value, function (v) { patch({ value: v }); }),
+      el('button', { class: 'link', onclick: onRemove }, '✕')
+    );
+  };
+
   // Блок условий отбора — общий для «Настроек» (по сырым полям источников,
   // до расчёта сущностей) и «Индикаторов» (по именам сущностей, после
   // расчёта): один и тот же UI, разные списки полей и разные экшены
@@ -68,16 +111,9 @@
     if (!opts.fields.length) return null;
     var d = opts.d;
     var row = function (cond, i) {
-      var patch = function (p) { d({ type: opts.actions.update, index: i, patch: p }); };
-      return el('div', { class: 'condition' + (OP_LIST[cond.op] ? ' has-list' : '') },
-        el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
-          [el('option', { value: '' }, 'поле…')].concat(opts.fields.map(function (c) {
-            return el('option', { value: c, selected: c === cond.field }, c);
-          }))),
-        opSelect(cond.op, function (v) { patch({ op: v }); }),
-        valueControl(cond.op, cond.value, function (v) { patch({ value: v }); }),
-        el('button', { class: 'link', onclick: function () { d({ type: opts.actions.remove, index: i }); } }, '✕')
-      );
+      return conditionRow(cond, opts.fields,
+        function (p) { d({ type: opts.actions.update, index: i, patch: p }); },
+        function () { d({ type: opts.actions.remove, index: i }); });
     };
     return el('div', {},
       el('h2', {}, opts.title),
@@ -290,7 +326,8 @@
 
   return {
     opSelect: opSelect, valueControl: valueControl, quickValueInput: quickValueInput,
-    viewNav: viewNav, viewFooter: viewFooter, conditionsBlock: conditionsBlock,
+    fieldSelect: fieldSelect, moveRemoveButtons: moveRemoveButtons,
+    viewNav: viewNav, viewFooter: viewFooter, conditionsBlock: conditionsBlock, conditionRow: conditionRow,
     FUNNEL_SVG: FUNNEL_SVG, SEARCH_SVG: SEARCH_SVG,
     SORT_SVG: SORT_SVG, SORT_ASC_SVG: SORT_ASC_SVG, SORT_DESC_SVG: SORT_DESC_SVG
   };

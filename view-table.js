@@ -28,12 +28,12 @@
   var el = Util.el, clear = Util.clear, groupBy = Util.groupBy;
   var visibleColumns = Dataset.visibleColumns, applyAdvanced = Dataset.applyAdvanced,
       applySort = Dataset.applySort, findNextMatch = Dataset.findNextMatch,
-      uniqueValues = Dataset.uniqueValues, OP_LIST = Dataset.OP_LIST;
+      uniqueValues = Dataset.uniqueValues;
   var colWidthPx = Entities.colWidthPx, MIN_COL_W = Entities.MIN_COL_W;
   var AGG_FUNCS_BY_TYPE = Entities.AGG_FUNCS_BY_TYPE, AGG_FUNC_LABELS = Entities.AGG_FUNC_LABELS,
       aggregateGroup = Entities.aggregateGroup;
-  var opSelect = ViewCommon.opSelect, valueControl = ViewCommon.valueControl,
-      quickValueInput = ViewCommon.quickValueInput;
+  var quickValueInput = ViewCommon.quickValueInput, fieldSelect = ViewCommon.fieldSelect,
+      moveRemoveButtons = ViewCommon.moveRemoveButtons, conditionRow = ViewCommon.conditionRow;
   var FUNNEL_SVG = ViewCommon.FUNNEL_SVG, SEARCH_SVG = ViewCommon.SEARCH_SVG, SORT_SVG = ViewCommon.SORT_SVG,
       SORT_ASC_SVG = ViewCommon.SORT_ASC_SVG, SORT_DESC_SVG = ViewCommon.SORT_DESC_SVG;
 
@@ -79,21 +79,18 @@
 
     var cols = visibleColumns(state.dataset, false);   // скрытые индикаторы тут не предлагаем
     var advRow = function (row, i) {
-      var patch = function (p) { d({ type: 'adv/update', index: i, patch: p }); };
-      return el('div', { class: 'condition' + (OP_LIST[row.op] ? ' has-list' : '') },
-        i === 0
-          ? el('span', { class: 'adv-conj-spacer' })
-          : el('select', { class: 'adv-conj', onchange: function (e) { patch({ conj: e.target.value }); } },
-              el('option', { value: 'and', selected: row.conj !== 'or' }, 'И'),
-              el('option', { value: 'or', selected: row.conj === 'or' }, 'ИЛИ')),
-        el('select', { onchange: function (e) { patch({ field: e.target.value }); } },
-          [el('option', { value: '' }, 'поле…')].concat(cols.map(function (c) {
-            return el('option', { value: c, selected: c === row.field }, c);
-          }))),
-        opSelect(row.op, function (v) { patch({ op: v }); }),
-        valueControl(row.op, row.value, function (v) { patch({ value: v }); }),
-        el('button', { class: 'link', onclick: function () { d({ type: 'adv/remove', index: i }); } }, '✕')
-      );
+      var leading = i === 0
+        ? el('span', { class: 'adv-conj-spacer' })
+        : el('select', {
+            class: 'adv-conj',
+            onchange: function (e) { d({ type: 'adv/update', index: i, patch: { conj: e.target.value } }); }
+          },
+            el('option', { value: 'and', selected: row.conj !== 'or' }, 'И'),
+            el('option', { value: 'or', selected: row.conj === 'or' }, 'ИЛИ'));
+      return conditionRow(row, cols,
+        function (p) { d({ type: 'adv/update', index: i, patch: p }); },
+        function () { d({ type: 'adv/remove', index: i }); },
+        leading);
     };
 
     var entMapForAgg = {};
@@ -134,17 +131,11 @@
       var type = (entMapForAgg[agg.column] && entMapForAgg[agg.column].type) || 'text';
       var fns = AGG_FUNCS_BY_TYPE[type] || [];
       return el('div', { class: 'condition agg-row' },
-        el('select', {
-          onchange: function (e) {
-            var newCol = e.target.value;
-            var newType = (entMapForAgg[newCol] && entMapForAgg[newCol].type) || 'text';
-            var newFns = AGG_FUNCS_BY_TYPE[newType] || [];
-            patch({ column: newCol, fn: newFns.indexOf(agg.fn) !== -1 ? agg.fn : (newFns[0] || '') });
-          }
-        },
-          [el('option', { value: '' }, 'поле…')].concat(options.map(function (c) {
-            return el('option', { value: c, selected: c === agg.column }, c);
-          }))),
+        fieldSelect(agg.column, options, function (newCol) {
+          var newType = (entMapForAgg[newCol] && entMapForAgg[newCol].type) || 'text';
+          var newFns = AGG_FUNCS_BY_TYPE[newType] || [];
+          patch({ column: newCol, fn: newFns.indexOf(agg.fn) !== -1 ? agg.fn : (newFns[0] || '') });
+        }, 'поле…'),
         el('select', { disabled: !fns.length, onchange: function (e) { patch({ fn: e.target.value }); } },
           fns.map(function (f) {
             return el('option', { value: f, selected: f === agg.fn }, AGG_FUNC_LABELS[f] || f);
@@ -160,19 +151,14 @@
       var addDisabled = !aggColumnOptions(i, -1, '').length;
       return el('div', { class: 'condition-block' },
         el('div', { class: 'condition' },
-          el('select', { onchange: function (e) { d({ type: 'group/update', index: i, patch: { column: e.target.value } }); } },
-            [el('option', { value: '' }, 'поле…')].concat(colOptions.map(function (c) {
-              return el('option', { value: c, selected: c === g.column }, c);
-            }))),
-          el('button', {
-            class: 'link', title: 'выше', disabled: i === 0,
-            onclick: function () { d({ type: 'group/move', index: i, dir: -1 }); }
-          }, '↑'),
-          el('button', {
-            class: 'link', title: 'ниже', disabled: i === state.groupBy.length - 1,
-            onclick: function () { d({ type: 'group/move', index: i, dir: 1 }); }
-          }, '↓'),
-          el('button', { class: 'link', onclick: function () { d({ type: 'group/remove', index: i }); } }, '✕')
+          fieldSelect(g.column, colOptions, function (v) { d({ type: 'group/update', index: i, patch: { column: v } }); }, 'поле…'),
+          moveRemoveButtons({
+            upTitle: 'выше', downTitle: 'ниже',
+            upDisabled: i === 0, downDisabled: i === state.groupBy.length - 1,
+            onUp: function () { d({ type: 'group/move', index: i, dir: -1 }); },
+            onDown: function () { d({ type: 'group/move', index: i, dir: 1 }); },
+            onRemove: function () { d({ type: 'group/remove', index: i }); }
+          })
         ),
         (g.agg || []).length
           ? el('div', { class: 'agg-list' }, g.agg.map(function (a, ai) { return aggRow(i, a, ai); }))
@@ -201,23 +187,18 @@
     var sortRow = function (lvl, i) {
       var patch = function (p) { d({ type: 'sort/update', index: i, patch: p }); };
       return el('div', { class: 'condition' },
-        el('select', { onchange: function (e) { patch({ col: e.target.value }); } },
-          [el('option', { value: '' }, 'поле…')].concat(cols.map(function (c) {
-            return el('option', { value: c, selected: c === lvl.col }, c);
-          }))),
+        fieldSelect(lvl.col, cols, function (v) { patch({ col: v }); }, 'поле…'),
         el('select', { onchange: function (e) { patch({ dir: e.target.value }); } },
           el('option', { value: 'asc', selected: lvl.dir !== 'desc' }, 'по возрастанию'),
           el('option', { value: 'desc', selected: lvl.dir === 'desc' }, 'по убыванию')
         ),
-        el('button', {
-          class: 'link', title: 'выше', disabled: i === 0,
-          onclick: function () { d({ type: 'sort/move', index: i, dir: -1 }); }
-        }, '↑'),
-        el('button', {
-          class: 'link', title: 'ниже', disabled: i === state.sortBy.length - 1,
-          onclick: function () { d({ type: 'sort/move', index: i, dir: 1 }); }
-        }, '↓'),
-        el('button', { class: 'link', onclick: function () { d({ type: 'sort/remove', index: i }); } }, '✕')
+        moveRemoveButtons({
+          upTitle: 'выше', downTitle: 'ниже',
+          upDisabled: i === 0, downDisabled: i === state.sortBy.length - 1,
+          onUp: function () { d({ type: 'sort/move', index: i, dir: -1 }); },
+          onDown: function () { d({ type: 'sort/move', index: i, dir: 1 }); },
+          onRemove: function () { d({ type: 'sort/remove', index: i }); }
+        })
       );
     };
 
@@ -722,7 +703,7 @@
   };
 
   return {
-    cellNode: cellNode, viewTableShell: viewTableShell, renderAdvFilter: renderAdvFilter,
+    viewTableShell: viewTableShell, renderAdvFilter: renderAdvFilter,
     renderExportPanel: renderExportPanel, renderGrid: renderGrid
   };
 });

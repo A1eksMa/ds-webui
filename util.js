@@ -6,11 +6,6 @@
 // (node:test → require(), см. tests/).
 (function (root) {
 
-  var pipe = function () {
-    var fns = [].slice.call(arguments);
-    return function (x) { return fns.reduce(function (v, f) { return f(v); }, x); };
-  };
-
   var uniq = function (xs) { return Array.from(new Set(xs)); };
 
   var groupBy = function (keyFn) {
@@ -76,7 +71,7 @@
   var clear = function (node) { while (node.firstChild) node.removeChild(node.firstChild); return node; };
 
   var api = {
-    pipe: pipe, uniq: uniq, groupBy: groupBy, setIn: setIn, omit: omit, fmtDate: fmtDate,
+    uniq: uniq, groupBy: groupBy, setIn: setIn, omit: omit, fmtDate: fmtDate,
     _swap: _swap, el: el, clear: clear
   };
 

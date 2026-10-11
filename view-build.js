@@ -6,26 +6,29 @@
 // Столбцы результата и второй проход условий (по индикаторам) — отдельная
 // страница «Индикаторы», см. view-entities.js. DOM-зависимый код — не
 // тестируется под node:test. Зависит от util.js, store.js, dataset.js
-// (JOIN_TYPES), view-common.js (conditionsBlock). Ссылки на main.js
+// (JOIN_TYPES), entities.js (presetColumns), view-common.js (conditionsBlock).
+// Ссылки на main.js
 // (buildDataset/store) разрешаются лениво через window.DS_APP в момент
 // клика — main.js грузится последним, но к моменту, когда пользователь
 // может кликнуть, все скрипты уже выполнены.
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory(
-      require('./util.js'), require('./store.js'), require('./dataset.js'), require('./view-common.js')
+      require('./util.js'), require('./store.js'), require('./dataset.js'),
+      require('./entities.js'), require('./view-common.js')
     );
   } else {
     root.DS_APP = root.DS_APP || {};
-    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
+    Object.assign(root.DS_APP, factory(root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP, root.DS_APP));
   }
-})(typeof window !== 'undefined' ? window : this, function (Util, Store, Dataset, ViewCommon) {
+})(typeof window !== 'undefined' ? window : this, function (Util, Store, Dataset, Entities, ViewCommon) {
 
   var el = Util.el, uniq = Util.uniq, fmtDate = Util.fmtDate;
   var selectedNames = Store.selectedNames, isStale = Store.isStale, basePreset = Store.basePreset,
       savePreset = Store.savePreset, loadPresetFile = Store.loadPresetFile;
   var JOIN_TYPES = Dataset.JOIN_TYPES;
-  var conditionsBlock = ViewCommon.conditionsBlock;
+  var presetColumns = Entities.presetColumns;
+  var conditionsBlock = ViewCommon.conditionsBlock, fieldSelect = ViewCommon.fieldSelect;
 
   var badge = function (ms) {
     return isStale(ms)
@@ -94,12 +97,7 @@
     // Строка появляется/исчезает сама при отметке/снятии источника (см.
     // preset/toggleSource -> reconcileJoins), вручную тут правятся только поля.
     var joinRow = function (j, rightName, i, earlier) {
-      var pick = function (value, options, onchange) {
-        return el('select', { onchange: function (e) { onchange(e.target.value); } },
-          [el('option', { value: '' }, '—')].concat(options.map(function (o) {
-            return el('option', { value: o, selected: o === value }, o);
-          })));
-      };
+      var pick = function (value, options, onchange) { return fieldSelect(value, options, onchange, '—'); };
       var typeSelect = el('select', {
         class: 'join-type', title: 'тип связки',
         onchange: function (e) { d({ type: 'preset/updateJoin', index: i, patch: { type: e.target.value } }); }
@@ -119,12 +117,7 @@
     };
 
     // все выбранные (source, label) для базовых фильтров
-    var pickedColumns = chosen.reduce(function (acc, name) {
-      var ms = mSources.find(function (s) { return s.name === name; });
-      if (!ms) return acc;
-      var labels = preset.query.sources[name].labels || [ms.key].concat(ms.labels);
-      return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
-    }, []);
+    var pickedColumns = presetColumns(preset, mSources);
 
     // условия «Настроек» — первый проход фильтрации, сразу после JOIN, по сырым
     // полям источников (до расчёта индикаторов — они на «Настройках» ещё не

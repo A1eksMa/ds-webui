@@ -30,8 +30,10 @@
   var el = Util.el;
   var selectedNames = Store.selectedNames;
   var ENTITY_KINDS = Entities.ENTITY_KINDS, ENTITY_TYPES = Entities.ENTITY_TYPES,
-      entityOutNames = Entities.entityOutNames, lettersForInputs = Entities.lettersForInputs;
-  var conditionsBlock = ViewCommon.conditionsBlock;
+      entityOutNames = Entities.entityOutNames, lettersForInputs = Entities.lettersForInputs,
+      presetColumns = Entities.presetColumns;
+  var conditionsBlock = ViewCommon.conditionsBlock, fieldSelect = ViewCommon.fieldSelect,
+      moveRemoveButtons = ViewCommon.moveRemoveButtons;
 
   var viewEntities = function (state, d) {
     var preset = state.preset;
@@ -40,12 +42,7 @@
 
     // те же поля, что можно выбрать на «Настройках» для условий — источник
     // сущностей: любое выбранное поле любого выбранного источника
-    var pickedColumns = chosen.reduce(function (acc, name) {
-      var ms = mSources.find(function (s) { return s.name === name; });
-      if (!ms) return acc;
-      var labels = preset.query.sources[name].labels || [ms.key].concat(ms.labels);
-      return acc.concat(labels.map(function (l) { return chosen.length > 1 ? name + '.' + l : l; }));
-    }, []);
+    var pickedColumns = presetColumns(preset, mSources);
 
     // exclude -- колонки, которые не предлагать в списке (кроме cur -- текущая всегда
     // видна в своём же select'е, даже если формально "занята"). Нужно для формульных
@@ -53,10 +50,7 @@
     var colSelect = function (cur, onChange, exclude) {
       var hide = exclude || [];
       var options = pickedColumns.filter(function (c) { return c === cur || hide.indexOf(c) === -1; });
-      return el('select', { onchange: function (e) { onChange(e.target.value); } },
-        [el('option', { value: '' }, 'поле…')].concat(options.map(function (c) {
-          return el('option', { value: c, selected: c === cur }, c);
-        })));
+      return fieldSelect(cur, options, onChange, 'поле…');
     };
 
     // строка сущности «подпись · контрол»; block — для многострочного контрола
@@ -85,19 +79,23 @@
           return el('div', { class: 'entity-input' },
             withLetters ? el('span', { class: 'entity-letter' }, Formula.letterFor(ii)) : null,
             colSelect(inp.column, function (v) {
-              d({ type: 'preset/updateEntityInput', index: i, ii: ii, patch: { column: v } });
+              d({ type: 'preset/updateEntityInput', index: i, inputIndex: ii, patch: { column: v } });
             }, usedByOthers),
             withWeight ? el('input', {
               type: 'number', class: 'ent-weight', step: '0.05', min: '0', max: '1',
               value: inp.weight == null ? '' : String(inp.weight), placeholder: 'вес',
               onchange: function (ev) {
-                d({ type: 'preset/updateEntityInput', index: i, ii: ii,
+                d({ type: 'preset/updateEntityInput', index: i, inputIndex: ii,
                     patch: { weight: ev.target.value === '' ? 0 : Number(ev.target.value) } });
               }
             }) : null,
-            el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntityInput', index: i, ii: ii, dir: -1 }); } }, '↑'),
-            el('button', { class: 'link', onclick: function () { d({ type: 'preset/moveEntityInput', index: i, ii: ii, dir: 1 }); } }, '↓'),
-            el('button', { class: 'link', onclick: function () { d({ type: 'preset/removeEntityInput', index: i, ii: ii }); } }, '✕')
+            moveRemoveButtons({
+              upTitle: 'выше', downTitle: 'ниже',
+              upDisabled: ii === 0, downDisabled: ii === inputs.length - 1,
+              onUp: function () { d({ type: 'preset/moveEntityInput', index: i, inputIndex: ii, dir: -1 }); },
+              onDown: function () { d({ type: 'preset/moveEntityInput', index: i, inputIndex: ii, dir: 1 }); },
+              onRemove: function () { d({ type: 'preset/removeEntityInput', index: i, inputIndex: ii }); }
+            })
           );
         }),
         el('button', { class: 'link', onclick: function () { d({ type: 'preset/addEntityInput', index: i }); } }, '+ вход')
@@ -192,12 +190,13 @@
                 onchange: function (ev) { up({ hidden: ev.target.checked }); }
               }),
               'скрыть в таблице'),
-            el('button', { class: 'link', title: 'переместить выше',
-              onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: -1 }); } }, '↑'),
-            el('button', { class: 'link', title: 'переместить ниже',
-              onclick: function () { d({ type: 'preset/moveEntity', index: i, dir: 1 }); } }, '↓'),
-            el('button', { class: 'link', title: 'удалить сущность',
-              onclick: function () { d({ type: 'preset/removeEntity', index: i }); } }, '✕')
+            moveRemoveButtons({
+              upTitle: 'переместить выше', downTitle: 'переместить ниже', removeTitle: 'удалить сущность',
+              upDisabled: i === 0, downDisabled: i === preset.view.entities.length - 1,
+              onUp: function () { d({ type: 'preset/moveEntity', index: i, dir: -1 }); },
+              onDown: function () { d({ type: 'preset/moveEntity', index: i, dir: 1 }); },
+              onRemove: function () { d({ type: 'preset/removeEntity', index: i }); }
+            })
           )
         ),
         el('div', { class: 'entity-rows' },

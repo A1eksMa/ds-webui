@@ -210,7 +210,7 @@ setTimeout(() => {
   try {
     const DS_APP = context.DS_APP;
     const expectedExports = [
-      'pipe', 'el', 'joinSources', 'matchCondition', 'parseNum', 'parseDate', 'toCsv',
+      'el', 'joinSources', 'matchCondition', 'parseNum', 'parseDate', 'toCsv',
       'createStore', 'reducer', 'normalizePreset', 'opSelect', 'viewNav', 'viewBuild',
       'viewTableShell', 'renderGrid', 'store', 'buildDataset', 'exportXls', 'exportCsv'
     ];

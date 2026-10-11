@@ -3,7 +3,7 @@
 // Store: фабрика createStore (reducer + dispatch + subscribe), селекторы
 // состояния, нормализация пресета, редьюсер, (де)сериализация пресета в файл.
 // Зависит от util.js (omit/setIn/_swap), dataset.js (OP_IDS/JOIN_TYPE_IDS),
-// entities.js (normalizeEntities/mergeEntity/_entityColumns),
+// entities.js (normalizeEntities/mergeEntity/entityColumns),
 // effects.js (download/readFile).
 (function (root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
@@ -19,7 +19,7 @@
   var omit = Util.omit, setIn = Util.setIn, _swap = Util._swap;
   var OP_IDS = Dataset.OP_IDS, JOIN_TYPE_IDS = Dataset.JOIN_TYPE_IDS;
   var normalizeEntities = Entities.normalizeEntities, mergeEntity = Entities.mergeEntity,
-      _entityColumns = Entities._entityColumns, columnType = Entities.columnType;
+      entityColumns = Entities.entityColumns, columnType = Entities.columnType;
   var download = Effects.download, readFile = Effects.readFile, storage = Effects.storage;
 
   var isStale = function (ms) { return ms.db_max_cnt > ms.gen_max_cnt; };
@@ -208,21 +208,21 @@
     exportOpen: false        // область экспорта над таблицей развёрнута
   };
 
-  var reducer = function (state, a) {
+  // ===========================================================================
+  // Редьюсер разбит по доменам действий (каждый -- тот же switch на свой срез
+  // кейсов, честная экстракция без изменения логики внутри кейсов). Верхний
+  // reducer() сам обрабатывает несколько действий, не привязанных к какому-то
+  // из доменов (bootstrap: manifest/route; видимость панелей экспорта/фильтра),
+  // остальное пробует по доменам по очереди -- "не изменился state" == "этот
+  // домен не распознал действие, пробуем следующий" (ни один case ни в одном
+  // домене не возвращает state как есть для РАСПОЗНАННОГО действия -- setIn/
+  // Object.assign всегда создают новый объект, так что этот признак надёжен).
+  // ===========================================================================
+
+  // --- preset/* (кроме списка сущностей -- он в entityListReducer ниже) + ui/toggleSrc
+  // (тоже про состояние страницы «Настройки» -- какие источники развёрнуты) ---
+  var presetReducer = function (state, a) {
     switch (a.type) {
-
-      case 'manifest/loaded':
-        return Object.assign({}, state, {
-          manifest: a.manifest,
-          dataDir: a.dataDir,
-          manifestError: (a.conflicts && a.conflicts.length)
-            ? 'Источник(и) с таким именем уже есть в другом файле манифеста: ' + a.conflicts.join(', ')
-              + ' -- переименуйте источник или убедитесь, что он не описан в двух файлах сразу.'
-            : null
-        });
-
-      case 'route/set':
-        return Object.assign({}, state, { route: a.route });
 
       case 'preset/set':
         return Object.assign({}, state, { preset: normalizePreset(a.preset), buildError: null });
@@ -313,8 +313,18 @@
         return setIn(state, ['preset', 'view', 'entityConditions'],
           state.preset.view.entityConditions.filter(function (_, i) { return i !== a.index; }));
 
+      default:
+        return state;
+    }
+  };
+
+  // --- preset/view.entities -- список сущностей страницы «Индикаторы» (кроме
+  // условий по ним -- те выше, в presetReducer, как и остальные условия) ---
+  var entityListReducer = function (state, a) {
+    switch (a.type) {
+
       case 'preset/addEntity': {
-        var ec = _entityColumns(state.preset);
+        var ec = entityColumns(state.preset, state.manifest && state.manifest.sources);
         var free = ec.all.filter(function (c) { return !ec.used[c]; })[0] || '';
         var freeType = free ? columnType(state.preset, state.manifest && state.manifest.sources, free) : 'text';
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.concat([
@@ -355,7 +365,7 @@
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
           if (i !== a.index) return e;
           var ins = (e.from.inputs || []).map(function (inp, ii) {
-            return ii === a.ii ? Object.assign({}, inp, a.patch) : inp;
+            return ii === a.inputIndex ? Object.assign({}, inp, a.patch) : inp;
           });
           return mergeEntity(e, { from: { inputs: ins } });
         }));
@@ -363,16 +373,26 @@
       case 'preset/removeEntityInput':
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
           return i === a.index
-            ? mergeEntity(e, { from: { inputs: (e.from.inputs || []).filter(function (_, ii) { return ii !== a.ii; }) } })
+            ? mergeEntity(e, { from: { inputs: (e.from.inputs || []).filter(function (_, ii) { return ii !== a.inputIndex; }) } })
             : e;
         }));
 
       case 'preset/moveEntityInput':
         return setIn(state, ['preset', 'view', 'entities'], state.preset.view.entities.map(function (e, i) {
           return i === a.index
-            ? mergeEntity(e, { from: { inputs: _swap(e.from.inputs || [], a.ii, a.ii + a.dir) } })
+            ? mergeEntity(e, { from: { inputs: _swap(e.from.inputs || [], a.inputIndex, a.inputIndex + a.dir) } })
             : e;
         }));
+
+      default:
+        return state;
+    }
+  };
+
+  // --- build/* -- пересборка датасета (view-build.js/view-entities.js "Применить
+  // и открыть таблицу", main.js::buildDataset) ---
+  var buildReducer = function (state, a) {
+    switch (a.type) {
 
       case 'build/start':
         return Object.assign({}, state, { building: true, buildError: null });
@@ -387,6 +407,16 @@
           adv: [], sortBy: []             // транзиентные слои сбрасываются при пересборке
           // quickValuesLimit НЕ сбрасывается -- это настройка UI, не датасета
         });
+
+      default:
+        return state;
+    }
+  };
+
+  // --- group/* + groupAgg/* -- уровни группировки «Таблицы» и агрегаторы
+  // итоговой строки каждого уровня (view-table.js::renderAdvFilter/renderGrid) ---
+  var groupReducer = function (state, a) {
+    switch (a.type) {
 
       case 'group/add':
         return Object.assign({}, state, { groupBy: state.groupBy.concat([{ column: '', agg: [] }]) });
@@ -409,10 +439,9 @@
           expanded: {}
         });
 
-      // --- агрегаторы итоговой строки группировки (view-table.js), вложены в свой
-      // уровень group/*: {column, fn} -- column -- какой столбец агрегировать, fn --
-      // имя функции из Entities.AGG_FUNCS_BY_TYPE[тип этого столбца] (UI уже выбрал
-      // допустимую комбинацию, редьюсер не валидирует типы -- это UI-слой view-table.js).
+      // {column, fn} -- column -- какой столбец агрегировать, fn -- имя функции из
+      // Entities.AGG_FUNCS_BY_TYPE[тип этого столбца] (UI уже выбрал допустимую
+      // комбинацию, редьюсер не валидирует типы -- это UI-слой view-table.js).
       case 'groupAgg/add':
         return Object.assign({}, state, {
           groupBy: state.groupBy.map(function (g, i) {
@@ -438,6 +467,16 @@
           })
         });
 
+      default:
+        return state;
+    }
+  };
+
+  // --- table/* -- отображение сетки «Таблицы»: пустые колонки, развёрнутые/
+  // свёрнутые узлы группировки ---
+  var tableReducer = function (state, a) {
+    switch (a.type) {
+
       case 'table/toggleHideEmpty':
         return Object.assign({}, state, { hideEmpty: !state.hideEmpty });
 
@@ -456,8 +495,16 @@
       case 'table/collapseAll':
         return Object.assign({}, state, { expanded: {} });
 
-      // --- сортировка: расширенная панель (многоуровневый редактор) ---
-      // по образцу group/add|update|remove|move выше.
+      default:
+        return state;
+    }
+  };
+
+  // --- sort/* -- расширенная панель сортировки (многоуровневый редактор),
+  // по образцу group/add|update|remove|move выше ---
+  var sortReducer = function (state, a) {
+    switch (a.type) {
+
       case 'sort/add':
         return Object.assign({}, state, { sortBy: state.sortBy.concat([{ col: '', dir: 'asc' }]) });
 
@@ -474,9 +521,17 @@
       case 'sort/move':
         return Object.assign({}, state, { sortBy: _swap(state.sortBy, a.index, a.index + a.dir) });
 
-      // --- пиктограммы в заголовке таблицы: быстрый доступ к ОДНОМУ и тому же
-      // состоянию, что редактирует расширенная панель (adv/sortBy), плюс
-      // открытие/закрытие своего quick-слота ввода (поиск/фильтр). ---
+      default:
+        return state;
+    }
+  };
+
+  // --- quick/* -- пиктограммы в заголовке таблицы: быстрый доступ к ОДНОМУ и
+  // тому же состоянию, что редактирует расширенная панель (adv/sortBy), плюс
+  // открытие/закрытие своего quick-слота ввода (поиск/фильтр) ---
+  var quickReducer = function (state, a) {
+    switch (a.type) {
+
       case 'quick/toggle': {
         var qo = Object.assign({}, state.quickOpen);
         qo[a.column] = qo[a.column] === a.mode ? null : a.mode;
@@ -523,27 +578,15 @@
         return Object.assign({}, state, { quickValuesLimit: limit });
       }
 
-      case 'ui/setExportFormat':
-        return Object.assign({}, state, { exportFormat: a.value });
+      default:
+        return state;
+    }
+  };
 
-      // «Экспорт» и «Расширенный фильтр» — взаимоисключающие области над
-      // таблицей: открытие одной закрывает другую (закрытие — само по себе,
-      // вторую область не трогает, она и так уже закрыта по инварианту).
-      case 'export/toggle': {
-        var openingExport = !state.exportOpen;
-        return Object.assign({}, state, {
-          exportOpen: openingExport,
-          advOpen: openingExport ? false : state.advOpen
-        });
-      }
-
-      case 'adv/toggle': {
-        var openingAdv = !state.advOpen;
-        return Object.assign({}, state, {
-          advOpen: openingAdv,
-          exportOpen: openingAdv ? false : state.exportOpen
-        });
-      }
+  // --- adv/add|update|remove|reset -- условия расширенного фильтра (не видимость
+  // самой панели -- та в reducer() ниже, вместе с export/toggle) ---
+  var advReducer = function (state, a) {
+    switch (a.type) {
 
       case 'adv/add':
         return Object.assign({}, state, {
@@ -566,6 +609,62 @@
       default:
         return state;
     }
+  };
+
+  var reducer = function (state, a) {
+    switch (a.type) {
+
+      case 'manifest/loaded':
+        return Object.assign({}, state, {
+          manifest: a.manifest,
+          dataDir: a.dataDir,
+          manifestError: (a.conflicts && a.conflicts.length)
+            ? 'Источник(и) с таким именем уже есть в другом файле манифеста: ' + a.conflicts.join(', ')
+              + ' -- переименуйте источник или убедитесь, что он не описан в двух файлах сразу.'
+            : null
+        });
+
+      case 'route/set':
+        return Object.assign({}, state, { route: a.route });
+
+      case 'ui/setExportFormat':
+        return Object.assign({}, state, { exportFormat: a.value });
+
+      // «Экспорт» и «Расширенный фильтр» — взаимоисключающие области над
+      // таблицей: открытие одной закрывает другую (закрытие — само по себе,
+      // вторую область не трогает, она и так уже закрыта по инварианту).
+      case 'export/toggle': {
+        var openingExport = !state.exportOpen;
+        return Object.assign({}, state, {
+          exportOpen: openingExport,
+          advOpen: openingExport ? false : state.advOpen
+        });
+      }
+
+      case 'adv/toggle': {
+        var openingAdv = !state.advOpen;
+        return Object.assign({}, state, {
+          advOpen: openingAdv,
+          exportOpen: openingAdv ? false : state.exportOpen
+        });
+      }
+
+      default:
+        break;
+    }
+
+    // Ни один из перечисленных выше case'ов не совпал -- пробуем доменные
+    // редьюсеры по очереди; "вернул новый объект state" == "этот домен
+    // распознал действие" (см. комментарий перед presetReducer выше).
+    var domains = [
+      presetReducer, entityListReducer, buildReducer,
+      groupReducer, tableReducer, sortReducer, quickReducer, advReducer
+    ];
+    for (var i = 0; i < domains.length; i++) {
+      var next = domains[i](state, a);
+      if (next !== state) return next;
+    }
+    return state;
   };
 
   // ---------------------------------------------------------------------------
