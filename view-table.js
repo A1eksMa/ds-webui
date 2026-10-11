@@ -309,6 +309,11 @@
   // Курсор поиска "найти следующую" на столбец — чисто навигационное, не в сторе
   // (как и quickDraft, эфемерно, живёт только пока открыта страница).
   var searchCursor = {};
+  // Сколько строк материализуется в DOM сразу, остальное — по скроллу (см.
+  // renderGrid: rowDescriptors/materializeRow/renderMore). На таблицах от
+  // нескольких тысяч строк именно создание DOM-узлов — дорогая часть; порог
+  // принят пользователем без замера как приемлемый компромисс.
+  var ROW_RENDER_BATCH = 1000;
   // "столбец:режим" панели, которой нужно вернуть фокус+курсор сразу после
   // ОТКРЫТИЯ (не на каждый ререндер — иначе фокус выдёргивало бы из-под
   // пользователя при любом не связанном с этой панелью dispatch, например
@@ -326,6 +331,12 @@
   // обновляются при каждом renderGrid.
   var docCloseListenerAttached = false;
   var currentState = null, currentDispatch = null;
+  // Материализовать (при необходимости) строки до той, что ищет поиск (см.
+  // ROW_RENDER_BATCH выше, renderMore/currentEnsureMemberRendered в renderGrid)
+  // -- найденная строка может быть за пределами уже отрендеренного окна.
+  // Тот же приём "currentX, обновляется на каждый renderGrid", что currentState/
+  // currentDispatch чуть выше.
+  var currentEnsureMemberRendered = null;
   var attachDocCloseListener = function () {
     if (docCloseListenerAttached) return;
     docCloseListenerAttached = true;
@@ -408,6 +419,7 @@
     // и в renderLevel ниже). Выполняется ПОСЛЕ построения activeGroups —
     // объявлена здесь, вызывается из quick-панели поиска.
     var revealRow = function (idx) {
+      if (currentEnsureMemberRendered) currentEnsureMemberRendered(idx);
       var g = document.getElementById('grid');
       var tr = g && g.querySelector('tr[data-ridx="' + idx + '"]');
       if (!tr) return;
@@ -536,7 +548,14 @@
     // вложенно, по порядку; уровень, чьё поле больше не среди колонок (устаревший выбор
     // после смены пресета), пропускается, как и уровень с пустым полем (ещё не выбрано)
     var activeGroups = (state.groupBy || []).filter(function (g) { return g.column && cols.indexOf(g.column) !== -1; });
-    var bodyRows = [];
+
+    // Построение строк разбито на два шага: сначала -- ТОЛЬКО данные
+    // (rowDescriptors, без единого DOM-узла), потом -- материализация в <tr>
+    // (materializeRow ниже), и только для видимого окна + догрузки по скроллу
+    // (см. после сборки таблицы). На таблице от нескольких тысяч строк дорогая
+    // часть -- именно создание DOM; сам обход/группировка данных дёшев и для
+    // rowDescriptors делается целиком, без батчинга.
+    var rowDescriptors = [];
 
     if (activeGroups.length) {
       var memberIndent = (.5 + activeGroups.length * 1.2) + 'rem';
@@ -555,15 +574,11 @@
         });
       };
 
-      var renderLevel = function (rows, path) {
+      var collectLevel = function (rows, path) {
         var lvl = activeGroups[path.length];
         if (lvl === undefined) {
           rows.forEach(function (r) {
-            bodyRows.push(el('tr', { class: 'member', dataset: { ridx: String(rowIndex.get(r)) } }, cols.map(function (c, i) {
-              var cell = cellNode(r[c], entMap[c], r.__u && r.__u[c]);
-              if (i === 0) cell.style.paddingLeft = memberIndent;
-              return cell;
-            })));
+            rowDescriptors.push({ kind: 'member', row: r, ridx: rowIndex.get(r), indent: memberIndent });
           });
           return;
         }
@@ -586,28 +601,16 @@
           allKeys.push(pathKey);
           var open = !!state.expanded[pathKey];
           var groupRows = groups[k];
-          bodyRows.push(el('tr', {
-            class: 'grp' + (open ? ' open' : ''),
-            onclick: function () { d({ type: 'table/toggleGroup', key: pathKey }); }
-          }, cols.map(function (c) {
-            if (c === lvl.column) {
-              return el('td', { style: 'padding-left:' + (.5 + path.length * 1.2) + 'rem' },
-                el('span', { class: 'caret' }, open ? '▾' : '▸'),
-                ' ', el('strong', {}, k),
-                el('span', { class: 'muted' }, '  (' + groupRows.length + ')')
-              );
-            }
-            var a = aggByColumn[c];
-            if (!a) return el('td', {}, '');
-            var val = aggregateGroup(groupRows, c, entMap[c], a.fn);
-            return el('td', { class: 'agg-cell', title: AGG_FUNC_LABELS[a.fn] || a.fn }, val == null ? '' : val);
-          })));
-          if (open) renderLevel(groupRows, subPath);
+          rowDescriptors.push({
+            kind: 'grp', path: subPath, pathKey: pathKey, open: open, k: k,
+            groupRows: groupRows, lvl: lvl, aggByColumn: aggByColumn
+          });
+          if (open) collectLevel(groupRows, subPath);
           else collectDeepKeys(groupRows, subPath);
         });
       };
 
-      renderLevel(filtered.rows, []);
+      collectLevel(filtered.rows, []);
 
       node.appendChild(el('div', { class: 'grp-actions' },
         el('button', { class: 'link', onclick: function () { d({ type: 'table/expandAll', keys: allKeys }); } }, 'развернуть все'),
@@ -615,11 +618,42 @@
       ));
     } else {
       filtered.rows.forEach(function (r, i) {
-        bodyRows.push(el('tr', { dataset: { ridx: String(i) } }, cols.map(function (c) {
-          return cellNode(r[c], entMap[c], r.__u && r.__u[c]);
-        })));
+        rowDescriptors.push({ kind: 'member', row: r, ridx: i });
       });
     }
+
+    // Единственное место, создающее DOM-узел строки из descriptor -- вызывается
+    // только для текущего окна (ниже), не для rowDescriptors целиком.
+    var materializeRow = function (rd) {
+      if (rd.kind === 'member') {
+        var r = rd.row;
+        var attrs = { dataset: { ridx: String(rd.ridx) } };
+        if (rd.indent) attrs.class = 'member';
+        return el('tr', attrs, cols.map(function (c, i) {
+          var cell = cellNode(r[c], entMap[c], r.__u && r.__u[c]);
+          if (rd.indent && i === 0) cell.style.paddingLeft = rd.indent;
+          return cell;
+        }));
+      }
+      var open = rd.open, pathKey = rd.pathKey, groupRows = rd.groupRows, lvl = rd.lvl,
+          aggByColumn = rd.aggByColumn, k = rd.k, path = rd.path;
+      return el('tr', {
+        class: 'grp' + (open ? ' open' : ''),
+        onclick: function () { d({ type: 'table/toggleGroup', key: pathKey }); }
+      }, cols.map(function (c) {
+        if (c === lvl.column) {
+          return el('td', { style: 'padding-left:' + (.5 + path.length * 1.2) + 'rem' },
+            el('span', { class: 'caret' }, open ? '▾' : '▸'),
+            ' ', el('strong', {}, k),
+            el('span', { class: 'muted' }, '  (' + groupRows.length + ')')
+          );
+        }
+        var a = aggByColumn[c];
+        if (!a) return el('td', {}, '');
+        var val = aggregateGroup(groupRows, c, entMap[c], a.fn);
+        return el('td', { class: 'agg-cell', title: AGG_FUNC_LABELS[a.fn] || a.fn }, val == null ? '' : val);
+      }));
+    };
 
     // сводка (пресет/срез/строки/колонки) переехала в строку состояния внизу
     // окна (main.js, .statusbar) — единое место для всей информационной строки
@@ -631,10 +665,47 @@
     // Явная ширина = сумма столбцов. Без неё table-layout:fixed при width:max-content
     // всё равно меряет контент → столбец не ужать уже текста заголовка.
     var totalW = widths.reduce(function (a, b) { return a + b; }, 0);
+
+    // Первый проход материализует только ROW_RENDER_BATCH строк (а не все
+    // rowDescriptors) -- остальное догружается по скроллу (renderMore), минуя
+    // store.dispatch: иначе каждый тик скролла заново гонял бы весь конвейер
+    // (applyAdvanced/applySort/группировку + полную пересборку DOM) и
+    // обесценивал саму идею батчинга.
+    var renderedCount = Math.min(ROW_RENDER_BATCH, rowDescriptors.length);
+    var bodyRows = [];
+    for (var ri = 0; ri < renderedCount; ri++) bodyRows.push(materializeRow(rowDescriptors[ri]));
+
     node.appendChild(el('div', { class: 'scroll' },
       el('table', { class: 'data', style: 'width:' + totalW + 'px' },
         colgroup, el('thead', {}, head), el('tbody', {}, bodyRows))
     ));
+
+    var scrollEl = node.querySelector('.scroll');
+    var tbodyEl = scrollEl && scrollEl.querySelector('tbody');
+    var renderMore = function (targetCount) {
+      var target = Math.min(rowDescriptors.length, targetCount);
+      if (target <= renderedCount || !tbodyEl) return;
+      var frag = document.createDocumentFragment();
+      for (var i = renderedCount; i < target; i++) frag.appendChild(materializeRow(rowDescriptors[i]));
+      tbodyEl.appendChild(frag);
+      renderedCount = target;
+    };
+    if (scrollEl && renderedCount < rowDescriptors.length) {
+      // Порог "один экран до низа" -- догружаем заранее, чтобы пользователь не
+      // увидел пустоту даже на резком скролле колесом/перетаскиванием полосы.
+      scrollEl.addEventListener('scroll', function () {
+        if (renderedCount >= rowDescriptors.length) return;
+        var remaining = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
+        if (remaining < scrollEl.clientHeight) renderMore(renderedCount + ROW_RENDER_BATCH);
+      });
+    }
+    // currentEnsureMemberRendered -- найденная поиском строка (revealRow) может
+    // лежать за пределами уже отрендеренного окна; досрочно догружаем до неё.
+    currentEnsureMemberRendered = function (ridx) {
+      for (var i = renderedCount; i < rowDescriptors.length; i++) {
+        if (rowDescriptors[i].kind === 'member' && rowDescriptors[i].ridx === ridx) { renderMore(i + 1); return; }
+      }
+    };
 
     // реальная высота строки пиктограмм — под неё резервируется место в
     // .col-name (padding-bottom: var(--filter-h)), чтобы прижатая ко дну
